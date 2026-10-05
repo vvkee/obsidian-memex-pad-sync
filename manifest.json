@@ -1,0 +1,9 @@
+{
+  "id": "memex-sync",
+  "name": "Memex Sync",
+  "version": "1.0.0",
+  "minAppVersion": "1.4.0",
+  "description": "Read-only mirror of the memex GitHub repo into this vault. Built for offline reading on iOS.",
+  "author": "Muse",
+  "isDesktopOnly": false
+}
