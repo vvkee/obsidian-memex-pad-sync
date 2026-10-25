@@ -24,6 +24,8 @@ Obsidian 社区插件：memex vault 的 GitHub **双向同步** + 主页 dashboa
 
 **CSS snippets 白名单（v2.2.0）**：原来永跳整个 `.obsidian/`，现在只放行 `.obsidian/snippets/` 下的 `.css` 文件，字体、阅读样式这类 snippet 可以随 vault 同步到四端。其他一律不放行：`.obsidian/plugins/`（尤其本插件自己的 `data.json`，里面有 GitHub Token，绝不能进仓库）、`workspace.json` / `workspace-mobile.json`（各端窗口布局）、主题文件等。注意两点：① snippet 文件到了各端后，还要在该端设置 → 外观 → CSS snippets 里手动打开一次，Obsidian 不会自动启用新到的 snippet；② snippet 只应来自你自己的私有 vault 仓库，CSS 能 @import 外部资源，不要从不可信的仓库同步 snippet。旧版升级到 v2.2.0 后，首次拉取会强制重新比对 tree（只下载新增的 snippet，已有文件跳过），否则 head 没变会直接返回“已是最新”，snippet 永远到不了。
 
+**误删除修复（v2.2.1，必升）**：`vault.getFiles()` 看不到 `.obsidian/` 和点文件，旧版推送把“看不到”当成“已删除”。2026-10-25 iPad 一次双向推送误删了远端的 snippet、`.gitignore`、`.claude/settings.json`、多个 `.gitkeep`。v2.2.1 起，推送前对 state 里有、getFiles 里没有的文件先用 `adapter.exists` 核对，还在就按现存比对，真没了才删，核对出错时宁可不删。**在 iPad / Windows / Mac 上更新到 2.2.1 之前，不要从双向端做推送（手动同步也会先拉后推），否则还会误删。**
+
 **主页**：启动自动打开的 dashboard——问候语+时钟、笔记/inbox/同步统计、快捷入口（新建长文 / 今日 digest / 立即同步）、最近笔记。
 
 **模板建文**：ribbon「新建长文」→ 弹窗选 `templates/` 里的模板（模板存在仓库里，多端共用）→ 输入标题 → 在 `notes/` 建好带 frontmatter 的文件并打开。

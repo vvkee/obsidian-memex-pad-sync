@@ -521,7 +521,30 @@ var MemexPadSyncPlugin = class extends import_obsidian.Plugin {
       if (!old) created.push(f.path);
       else if (old !== sha) modified.push(f.path);
     }
-    const deleted = Object.keys(this.data.state.files).filter((p) => !seen.has(p));
+    const deleted = [];
+    for (const p of Object.keys(this.data.state.files)) {
+      if (seen.has(p)) continue;
+      let exists = true;
+      try {
+        exists = await this.app.vault.adapter.exists(p);
+      } catch (e) {
+        exists = true;
+      }
+      if (!exists) {
+        deleted.push(p);
+        continue;
+      }
+      try {
+        const bytes = new Uint8Array(await this.app.vault.adapter.readBinary(p));
+        data[p] = bytes;
+        seen.add(p);
+        const sha = gitBlobSha(bytes);
+        const old = this.data.state.files[p];
+        if (!old) created.push(p);
+        else if (old !== sha) modified.push(p);
+      } catch (e) {
+      }
+    }
     return { created, modified, deleted, data };
   }
   async pushSync(manual) {

@@ -559,7 +559,37 @@ export default class MemexPadSyncPlugin extends Plugin {
 			if (!old) created.push(f.path);
 			else if (old !== sha) modified.push(f.path);
 		}
-		const deleted = Object.keys(this.data.state.files).filter((p) => !seen.has(p));
+		// v2.2.1 修复：getFiles() 看不到 .obsidian/ 和点文件（.gitignore、.claude/、.gitkeep 等），
+		// 旧版把“看不到”直接当成“已删除”，双向端一推送就把这些文件从远端删掉
+		// （2026-10-25 iPad 推送误删了 snippet、.gitignore、.claude/settings.json 等）。
+		// 现在对 state 里有、getFiles 里没有的文件，先用 adapter.exists 核对：
+		// 还在磁盘上就按现存文件比对（改了算 modified），真没了才算 deleted；
+		// 核对本身出错时宁可不删，也不要误删。
+		const deleted: string[] = [];
+		for (const p of Object.keys(this.data.state.files)) {
+			if (seen.has(p)) continue;
+			let exists = true;
+			try {
+				exists = await this.app.vault.adapter.exists(p);
+			} catch {
+				exists = true;
+			}
+			if (!exists) {
+				deleted.push(p);
+				continue;
+			}
+			try {
+				const bytes = new Uint8Array(await this.app.vault.adapter.readBinary(p));
+				data[p] = bytes;
+				seen.add(p);
+				const sha = gitBlobSha(bytes);
+				const old = this.data.state.files[p];
+				if (!old) created.push(p);
+				else if (old !== sha) modified.push(p);
+			} catch {
+				// 读不到也不要删：留给下次同步再核对
+			}
+		}
 		return { created, modified, deleted, data };
 	}
 
