@@ -31,6 +31,7 @@ interface SyncState {
 	treeSha: string | null;
 	files: Record<string, string>; // path -> git blob sha
 	lastSyncAt: number | null;
+	snippetsAllowlisted: boolean; // 白名单迁移标记：旧版升级后首次拉取强制重新比对 tree
 }
 
 interface PluginData {
@@ -50,7 +51,7 @@ const DEFAULT_SETTINGS: MemexSyncSettings = {
 	pollIntervalSec: 60,
 };
 
-const DEFAULT_STATE: SyncState = { headSha: null, treeSha: null, files: {}, lastSyncAt: null };
+const DEFAULT_STATE: SyncState = { headSha: null, treeSha: null, files: {}, lastSyncAt: null, snippetsAllowlisted: false };
 
 // ---------- helpers ----------
 
@@ -74,7 +75,11 @@ function relTime(ts: number): string {
 }
 
 function isManaged(path: string): boolean {
-	return !path.startsWith('.obsidian/');
+	if (!path.startsWith('.obsidian/')) return true;
+	// 白名单（v2.2.0）：只放行 .obsidian/snippets/ 下的 .css 文件。
+	// 绝不放行 .obsidian/plugins/（尤其本插件自己的 data.json，里面有 GitHub Token）、
+	// workspace.json / workspace-mobile.json（各端窗口布局）等其他配置。
+	return path.startsWith('.obsidian/snippets/') && path.endsWith('.css');
 }
 
 function bytesToB64(bytes: Uint8Array): string {
@@ -379,6 +384,15 @@ export default class MemexPadSyncPlugin extends Plugin {
 			settings: { ...DEFAULT_SETTINGS, ...(raw?.settings ?? {}) },
 			state: { ...DEFAULT_STATE, ...(raw?.state ?? {}) },
 		};
+		// 白名单迁移：旧版 state 里没有 snippets，headSha 还指向旧版比对结果。
+		// 不清掉 headSha 的话，下次拉取会因 head 没变直接返回“已是最新”，
+		// 仓库里已有的 snippet 永远到不了。清掉后只会重新拉 tree 比对，
+		// 已有文件的 sha 还在 state.files 里，比对时会跳过，只下载新增的 snippet。
+		if (!this.data.state.snippetsAllowlisted) {
+			this.data.state.headSha = null;
+			this.data.state.snippetsAllowlisted = true;
+			await this.save();
+		}
 	}
 
 	private async save(): Promise<void> {
@@ -498,7 +512,7 @@ export default class MemexPadSyncPlugin extends Plugin {
 			} finally {
 				this.selfWriting = false;
 			}
-			this.data.state = { headSha: head.sha, treeSha: tree.sha, files: nextFiles, lastSyncAt: Date.now() };
+			this.data.state = { headSha: head.sha, treeSha: tree.sha, files: nextFiles, lastSyncAt: Date.now(), snippetsAllowlisted: true };
 			await this.save();
 			new Notice(manual || changed > 0 ? `同步完成：${changed} 个文件更新` : '同步完成');
 			this.refreshHome();
@@ -614,7 +628,7 @@ export default class MemexPadSyncPlugin extends Plugin {
 			const nextFiles = { ...this.data.state.files };
 			for (const p of [...created, ...modified]) nextFiles[p] = gitBlobSha(data[p]);
 			for (const p of deleted) delete nextFiles[p];
-			this.data.state = { headSha: commit.sha, treeSha: tree.sha, files: nextFiles, lastSyncAt: Date.now() };
+			this.data.state = { headSha: commit.sha, treeSha: tree.sha, files: nextFiles, lastSyncAt: Date.now(), snippetsAllowlisted: true };
 			await this.save();
 			new Notice(`已推送到 git：${total} 个变更`);
 			this.refreshHome();

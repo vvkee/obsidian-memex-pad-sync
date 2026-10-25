@@ -98,7 +98,7 @@ var DEFAULT_SETTINGS = {
   pollEnabled: true,
   pollIntervalSec: 60
 };
-var DEFAULT_STATE = { headSha: null, treeSha: null, files: {}, lastSyncAt: null };
+var DEFAULT_STATE = { headSha: null, treeSha: null, files: {}, lastSyncAt: null, snippetsAllowlisted: false };
 function fmtDate(d) {
   const p = (n) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
@@ -116,7 +116,8 @@ function relTime(ts) {
   return `${d.getMonth() + 1}-${d.getDate()}`;
 }
 function isManaged(path) {
-  return !path.startsWith(".obsidian/");
+  if (!path.startsWith(".obsidian/")) return true;
+  return path.startsWith(".obsidian/snippets/") && path.endsWith(".css");
 }
 function bytesToB64(bytes) {
   let s = "";
@@ -369,6 +370,11 @@ var MemexPadSyncPlugin = class extends import_obsidian.Plugin {
       settings: { ...DEFAULT_SETTINGS, ...(_a = raw == null ? void 0 : raw.settings) != null ? _a : {} },
       state: { ...DEFAULT_STATE, ...(_b = raw == null ? void 0 : raw.state) != null ? _b : {} }
     };
+    if (!this.data.state.snippetsAllowlisted) {
+      this.data.state.headSha = null;
+      this.data.state.snippetsAllowlisted = true;
+      await this.save();
+    }
   }
   async save() {
     await this.saveData(this.data);
@@ -477,7 +483,7 @@ var MemexPadSyncPlugin = class extends import_obsidian.Plugin {
       } finally {
         this.selfWriting = false;
       }
-      this.data.state = { headSha: head.sha, treeSha: tree.sha, files: nextFiles, lastSyncAt: Date.now() };
+      this.data.state = { headSha: head.sha, treeSha: tree.sha, files: nextFiles, lastSyncAt: Date.now(), snippetsAllowlisted: true };
       await this.save();
       new import_obsidian.Notice(manual || changed > 0 ? `\u540C\u6B65\u5B8C\u6210\uFF1A${changed} \u4E2A\u6587\u4EF6\u66F4\u65B0` : "\u540C\u6B65\u5B8C\u6210");
       this.refreshHome();
@@ -575,7 +581,7 @@ var MemexPadSyncPlugin = class extends import_obsidian.Plugin {
       const nextFiles = { ...this.data.state.files };
       for (const p of [...created, ...modified]) nextFiles[p] = gitBlobSha(data[p]);
       for (const p of deleted) delete nextFiles[p];
-      this.data.state = { headSha: commit.sha, treeSha: tree.sha, files: nextFiles, lastSyncAt: Date.now() };
+      this.data.state = { headSha: commit.sha, treeSha: tree.sha, files: nextFiles, lastSyncAt: Date.now(), snippetsAllowlisted: true };
       await this.save();
       new import_obsidian.Notice(`\u5DF2\u63A8\u9001\u5230 git\uFF1A${total} \u4E2A\u53D8\u66F4`);
       this.refreshHome();
