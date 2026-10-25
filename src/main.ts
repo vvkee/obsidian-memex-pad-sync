@@ -22,6 +22,8 @@ interface MemexSyncSettings {
 	syncOnStartup: boolean;
 	twoWay: boolean; // iPad 写作机：本地修改自动 push；iPhone 保持关闭 = 只读镜像
 	openHomeOnStartup: boolean;
+	pollEnabled: boolean; // 前台运行时定期检查 main 有无新提交
+	pollIntervalSec: number;
 }
 
 interface SyncState {
@@ -44,6 +46,8 @@ const DEFAULT_SETTINGS: MemexSyncSettings = {
 	syncOnStartup: true,
 	twoWay: false,
 	openHomeOnStartup: true,
+	pollEnabled: true,
+	pollIntervalSec: 60,
 };
 
 const DEFAULT_STATE: SyncState = { headSha: null, treeSha: null, files: {}, lastSyncAt: null };
@@ -307,6 +311,7 @@ export default class MemexPadSyncPlugin extends Plugin {
 	private syncing = false;
 	private selfWriting = false;
 	private pushTimer: number | null = null;
+	private pollTimer: number | null = null;
 
 	async onload(): Promise<void> {
 		await this.loadPluginData();
@@ -327,6 +332,17 @@ export default class MemexPadSyncPlugin extends Plugin {
 			this.registerEvent(this.app.vault.on(ev, () => this.onLocalChange()));
 		}
 
+		// 轮询 + 切回前台：Obsidian 长开时 main 有新提交也能自动到，
+		// 不再只依赖启动同步和手动同步。iOS 切后台会挂起定时器，
+		// 回前台时由下面的 focus / visibilitychange 补拉一次。
+		this.restartPollTimer();
+		this.registerDomEvent(window, 'focus', () => {
+			void this.pullSync(false);
+		});
+		this.registerDomEvent(document, 'visibilitychange', () => {
+			if (document.visibilityState === 'visible') void this.pullSync(false);
+		});
+
 		this.app.workspace.onLayoutReady(() => {
 			if (this.data.settings.openHomeOnStartup) void this.openHome();
 			if (this.data.settings.syncOnStartup) {
@@ -341,6 +357,20 @@ export default class MemexPadSyncPlugin extends Plugin {
 
 	onunload(): void {
 		if (this.pushTimer !== null) window.clearTimeout(this.pushTimer);
+		if (this.pollTimer !== null) window.clearInterval(this.pollTimer);
+	}
+
+	/** 重启轮询定时器：设置里开关/间隔变化时调用。无变化时 pullSync 只发 1 次 HEAD 请求就返回，不下载文件。 */
+	restartPollTimer(): void {
+		if (this.pollTimer !== null) {
+			window.clearInterval(this.pollTimer);
+			this.pollTimer = null;
+		}
+		if (!this.data.settings.pollEnabled) return;
+		const sec = Math.max(30, this.data.settings.pollIntervalSec || 60);
+		this.pollTimer = window.setInterval(() => {
+			void this.pullSync(false);
+		}, sec * 1000);
 	}
 
 	private async loadPluginData(): Promise<void> {
@@ -608,11 +638,13 @@ export default class MemexPadSyncPlugin extends Plugin {
 		const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_HOME);
 		if (leaves.length > 0) {
 			this.app.workspace.revealLeaf(leaves[0]);
-			return;
+		} else {
+			const leaf = this.app.workspace.getLeaf(true);
+			await leaf.setViewState({ type: VIEW_TYPE_HOME, active: true });
+			this.app.workspace.revealLeaf(leaf);
 		}
-		const leaf = this.app.workspace.getLeaf(true);
-		await leaf.setViewState({ type: VIEW_TYPE_HOME, active: true });
-		this.app.workspace.revealLeaf(leaf);
+		// 打开主页即刷新一次，最近笔记和“上次同步”不依赖轮询节拍
+		void this.pullSync(false);
 	}
 
 	refreshHome(): void {
@@ -718,6 +750,33 @@ class MemexPadSyncSettingTab extends PluginSettingTab {
 					s.syncOnStartup = v;
 					await this.plugin['save']();
 				}),
+			);
+
+		new Setting(containerEl)
+			.setName('自动轮询（60 秒）')
+			.setDesc('打开后：前台运行时定期检查 main 有无新提交，有变化自动拉取；切回前台、打开主页时也会拉一次。无变化时只发 1 次 HEAD 请求，不下载文件。')
+			.addToggle((t) =>
+				t.setValue(s.pollEnabled).onChange(async (v) => {
+					s.pollEnabled = v;
+					await this.plugin['save']();
+					this.plugin.restartPollTimer();
+				}),
+			);
+
+		new Setting(containerEl)
+			.setName('轮询间隔')
+			.addDropdown((d) =>
+				d
+					.addOption('30', '30 秒')
+					.addOption('60', '60 秒')
+					.addOption('180', '3 分钟')
+					.addOption('300', '5 分钟')
+					.setValue(String(s.pollIntervalSec))
+					.onChange(async (v) => {
+						s.pollIntervalSec = parseInt(v, 10);
+						await this.plugin['save']();
+						this.plugin.restartPollTimer();
+					}),
 			);
 	}
 }

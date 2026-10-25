@@ -20,6 +20,8 @@ Obsidian 社区插件：memex vault 的 GitHub **双向同步** + 主页 dashboa
 
 **上行（push）**：本地文件有新建/修改/删除时，60 秒防抖后自动 push。流程：先 pull（保证 base 最新）→ 本地算 git blob sha 找差异 → 建 blob → 以远端 tree 为 base 建新 tree（含删除）→ 建 commit → 更新分支 ref。push 前二次确认远端 HEAD 没动；非 fast-forward 直接报错，**永不强推**。
 
+**自动轮询（v2.1.0）**：Obsidian 长开时不再只依赖启动同步和手动同步——前台运行时默认每 60 秒检查一次 main 的 HEAD sha，不变直接返回（1 次请求，不下载文件），变了才拉 tree 增量更新；切回前台、打开主页时也会立即拉一次。iOS 切后台会挂起定时器，回前台时补拉。设置里可关轮询，或把间隔改成 30 秒 / 3 分钟 / 5 分钟。轮询复用现有 pull 逻辑和 `syncing` 互斥，不会和推送打架。
+
 **主页**：启动自动打开的 dashboard——问候语+时钟、笔记/inbox/同步统计、快捷入口（新建长文 / 今日 digest / 立即同步）、最近笔记。
 
 **模板建文**：ribbon「新建长文」→ 弹窗选 `templates/` 里的模板（模板存在仓库里，多端共用）→ 输入标题 → 在 `notes/` 建好带 frontmatter 的文件并打开。

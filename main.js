@@ -94,7 +94,9 @@ var DEFAULT_SETTINGS = {
   token: "",
   syncOnStartup: true,
   twoWay: false,
-  openHomeOnStartup: true
+  openHomeOnStartup: true,
+  pollEnabled: true,
+  pollIntervalSec: 60
 };
 var DEFAULT_STATE = { headSha: null, treeSha: null, files: {}, lastSyncAt: null };
 function fmtDate(d) {
@@ -311,6 +313,7 @@ var MemexPadSyncPlugin = class extends import_obsidian.Plugin {
     this.syncing = false;
     this.selfWriting = false;
     this.pushTimer = null;
+    this.pollTimer = null;
   }
   async onload() {
     await this.loadPluginData();
@@ -325,6 +328,13 @@ var MemexPadSyncPlugin = class extends import_obsidian.Plugin {
     for (const ev of ["create", "modify", "delete", "rename"]) {
       this.registerEvent(this.app.vault.on(ev, () => this.onLocalChange()));
     }
+    this.restartPollTimer();
+    this.registerDomEvent(window, "focus", () => {
+      void this.pullSync(false);
+    });
+    this.registerDomEvent(document, "visibilitychange", () => {
+      if (document.visibilityState === "visible") void this.pullSync(false);
+    });
     this.app.workspace.onLayoutReady(() => {
       if (this.data.settings.openHomeOnStartup) void this.openHome();
       if (this.data.settings.syncOnStartup) {
@@ -338,6 +348,19 @@ var MemexPadSyncPlugin = class extends import_obsidian.Plugin {
   }
   onunload() {
     if (this.pushTimer !== null) window.clearTimeout(this.pushTimer);
+    if (this.pollTimer !== null) window.clearInterval(this.pollTimer);
+  }
+  /** 重启轮询定时器：设置里开关/间隔变化时调用。无变化时 pullSync 只发 1 次 HEAD 请求就返回，不下载文件。 */
+  restartPollTimer() {
+    if (this.pollTimer !== null) {
+      window.clearInterval(this.pollTimer);
+      this.pollTimer = null;
+    }
+    if (!this.data.settings.pollEnabled) return;
+    const sec = Math.max(30, this.data.settings.pollIntervalSec || 60);
+    this.pollTimer = window.setInterval(() => {
+      void this.pullSync(false);
+    }, sec * 1e3);
   }
   async loadPluginData() {
     var _a, _b;
@@ -573,11 +596,12 @@ var MemexPadSyncPlugin = class extends import_obsidian.Plugin {
     const leaves = this.app.workspace.getLeavesOfType(VIEW_TYPE_HOME);
     if (leaves.length > 0) {
       this.app.workspace.revealLeaf(leaves[0]);
-      return;
+    } else {
+      const leaf = this.app.workspace.getLeaf(true);
+      await leaf.setViewState({ type: VIEW_TYPE_HOME, active: true });
+      this.app.workspace.revealLeaf(leaf);
     }
-    const leaf = this.app.workspace.getLeaf(true);
-    await leaf.setViewState({ type: VIEW_TYPE_HOME, active: true });
-    this.app.workspace.revealLeaf(leaf);
+    void this.pullSync(false);
   }
   refreshHome() {
     for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_HOME)) {
@@ -656,6 +680,20 @@ var MemexPadSyncSettingTab = class extends import_obsidian.PluginSettingTab {
       (t) => t.setValue(s.syncOnStartup).onChange(async (v) => {
         s.syncOnStartup = v;
         await this.plugin["save"]();
+      })
+    );
+    new import_obsidian.Setting(containerEl).setName("\u81EA\u52A8\u8F6E\u8BE2\uFF0860 \u79D2\uFF09").setDesc("\u6253\u5F00\u540E\uFF1A\u524D\u53F0\u8FD0\u884C\u65F6\u5B9A\u671F\u68C0\u67E5 main \u6709\u65E0\u65B0\u63D0\u4EA4\uFF0C\u6709\u53D8\u5316\u81EA\u52A8\u62C9\u53D6\uFF1B\u5207\u56DE\u524D\u53F0\u3001\u6253\u5F00\u4E3B\u9875\u65F6\u4E5F\u4F1A\u62C9\u4E00\u6B21\u3002\u65E0\u53D8\u5316\u65F6\u53EA\u53D1 1 \u6B21 HEAD \u8BF7\u6C42\uFF0C\u4E0D\u4E0B\u8F7D\u6587\u4EF6\u3002").addToggle(
+      (t) => t.setValue(s.pollEnabled).onChange(async (v) => {
+        s.pollEnabled = v;
+        await this.plugin["save"]();
+        this.plugin.restartPollTimer();
+      })
+    );
+    new import_obsidian.Setting(containerEl).setName("\u8F6E\u8BE2\u95F4\u9694").addDropdown(
+      (d) => d.addOption("30", "30 \u79D2").addOption("60", "60 \u79D2").addOption("180", "3 \u5206\u949F").addOption("300", "5 \u5206\u949F").setValue(String(s.pollIntervalSec)).onChange(async (v) => {
+        s.pollIntervalSec = parseInt(v, 10);
+        await this.plugin["save"]();
+        this.plugin.restartPollTimer();
       })
     );
   }
