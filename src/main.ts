@@ -245,13 +245,31 @@ class HomeView extends ItemView {
 .memex-row .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .memex-row .m { font-size: 12px; color: var(--text-faint); white-space: nowrap; }
 .memex-empty { color: var(--text-faint); font-size: 13px; padding: 8px 4px; }
-.memex-todo-sec { font-size: 13px; font-weight: 700; color: var(--text-muted); margin: 16px 0 4px; }
-.memex-todo-group { font-size: 13px; font-weight: 700; margin: 12px 0 2px; }
-.memex-todo-row { display: flex; gap: 10px; align-items: baseline; padding: 8px 4px;
-  border-bottom: 1px solid var(--background-modifier-border); cursor: pointer; }
-.memex-check { font-size: 16px; color: var(--text-muted); line-height: 1; }
-.memex-todo-row .tt { flex: 1; }
-.memex-todo-note { color: var(--text-muted); font-size: 12px; padding: 0 4px 8px 32px; }
+.memex-quad-axes { color: var(--text-muted); font-size: 13px; margin: 0 0 16px; }
+.memex-quad-grid { display: grid; grid-template-columns: 1fr 1fr; }
+.memex-quad-cell { padding: 20px 20px 20px 0; }
+.memex-quad-cell:nth-child(odd) { padding-right: 20px; border-right: 1px solid var(--background-modifier-border); }
+.memex-quad-cell:nth-child(even) { padding-left: 20px; }
+.memex-quad-cell:nth-child(1), .memex-quad-cell:nth-child(2) { border-bottom: 1px solid var(--background-modifier-border); }
+.memex-quad-head { display: flex; gap: 8px; align-items: baseline; margin-bottom: 4px; }
+.memex-quad-head .icon { font-size: 18px; }
+.memex-quad-head .name { font-size: 15px; font-weight: 700; }
+.memex-quad-desc { color: var(--text-muted); font-size: 12px; margin-bottom: 8px; }
+.memex-todo-group { font-size: 13px; font-weight: 700; margin: 14px 0 4px; }
+.memex-todo-row { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; cursor: pointer; }
+.memex-quad-check { flex: none; width: 18px; height: 18px; border-radius: 50%; border: 2px solid; margin-top: 2px; box-sizing: border-box; }
+.memex-q1 .memex-quad-check { border-color: #e5484d; }
+.memex-q2 .memex-quad-check { border-color: #2aa79b; }
+.memex-q3 .memex-quad-check { border-color: #D0A215; }
+.memex-q4 .memex-quad-check { border-color: #8a8a8a; }
+.memex-todo-row .tt { flex: 1; font-size: 14px; line-height: 1.6; }
+.memex-todo-note { color: var(--text-muted); font-size: 12px; line-height: 1.6; margin: -2px 0 6px 32px; }
+@media (max-width: 600px) {
+  .memex-quad-grid { grid-template-columns: 1fr; }
+  .memex-quad-cell:nth-child(odd) { border-right: none; padding-right: 0; }
+  .memex-quad-cell:nth-child(even) { padding-left: 0; }
+  .memex-quad-cell:nth-child(3) { border-bottom: 1px solid var(--background-modifier-border); }
+}
 `;
 
 		const hero = root.createDiv('memex-hero');
@@ -302,29 +320,35 @@ class HomeView extends ItemView {
 		mkCap('旅行', '索引-旅行');
 		mkCap('memex', '索引-memex');
 
-		// 待办：Things 式列表，只读。解析 notes/待办清单.md 的分区，勾选请到原文。
+		// 待办：四象限矩阵，只读。解析 notes/待办清单.md 的象限分区，勾选请到原文。
 		if (todoFile) {
 			const text = await this.app.vault.read(todoFile);
 			type TodoItem = { title: string; note: string; group: string };
-			const sections: { name: string; items: TodoItem[] }[] = [];
-			let cur: { name: string; items: TodoItem[] } | null = null;
+			type Quad = { key: string; icon: string; name: string; desc: string; items: TodoItem[] };
+			const quads: Quad[] = [
+				{ key: 'q1', icon: '🔥', name: '重要且紧急', desc: '先做这件，错过窗口就没意义', items: [] },
+				{ key: 'q2', icon: '🎯', name: '重要不紧急', desc: '系统地基，值得专门留时间做', items: [] },
+				{ key: 'q3', icon: '⚡', name: '紧急不重要', desc: '小事，下次外拍前顺手设掉', items: [] },
+				{ key: 'q4', icon: '🌿', name: '不重要不紧急', desc: '先放着，不占今日和随时', items: [] },
+			];
+			const byName: Record<string, Quad> = {
+				'重要且紧急': quads[0], '重要不紧急': quads[1],
+				'紧急不重要': quads[2], '不重要不紧急': quads[3],
+			};
+			let cur: Quad | null = null;
 			let curGroup = '';
 			let last: TodoItem | null = null;
 			for (const raw of text.split('\n')) {
 				const line = raw.trimEnd();
 				const h = line.match(/^## (.+)$/);
 				if (h) {
-					if (['今日', '即将到来', '随时', '某天', '已完成'].includes(h[1].trim())) {
-						cur = { name: h[1].trim(), items: [] };
-						sections.push(cur);
-						curGroup = '';
-						last = null;
-					} else {
-						cur = null;
-					}
+					const name = h[1].replace(/[^\u4e00-\u9fa5]/g, '');
+					cur = byName[name] ?? null;
+					curGroup = '';
+					last = null;
 					continue;
 				}
-				if (!cur || cur.name === '已完成') continue;
+				if (!cur) continue;
 				const sub = line.match(/^### (.+)$/);
 				if (sub) {
 					curGroup = sub[1].trim();
@@ -345,38 +369,35 @@ class HomeView extends ItemView {
 					last.note = note[1].trim().replace(/\[\[([^\]]+)\]\]/g, '$1');
 					continue;
 				}
-				if (line && line.trim().length <= 12 && !line.startsWith('>') && !line.startsWith('来源：') && !line.startsWith('-')) {
-					curGroup = line.trim();
-				}
 			}
 			root.createDiv({ text: '待办', cls: 'memex-sec' });
 			root.createDiv({ text: '只读列表，勾选请到原文里勾', cls: 'memex-empty' });
-			for (const s of sections) {
-				if (s.name === '已完成') continue;
-				root.createDiv({ text: s.name, cls: 'memex-todo-sec' });
-				if (s.items.length === 0) {
-					root.createDiv({ text: s.name === '今日' ? '今日没有到期项' : '暂无', cls: 'memex-empty' });
-					continue;
-				}
+			root.createDiv({ text: '横轴：紧急 → 不紧急　·　纵轴：重要 → 不重要', cls: 'memex-quad-axes' });
+			const grid = root.createDiv('memex-quad-grid');
+			for (const q of quads) {
+				const cell = grid.createDiv(`memex-quad-cell memex-${q.key}`);
+				const head = cell.createDiv('memex-quad-head');
+				head.createSpan({ text: q.icon, cls: 'icon' });
+				head.createSpan({ text: `${q.name} · ${q.items.length}`, cls: 'name' });
+				cell.createDiv({ text: q.desc, cls: 'memex-quad-desc' });
 				let g = '';
-				for (const it of s.items) {
+				for (const it of q.items) {
 					if (it.group && it.group !== g) {
 						g = it.group;
-						root.createDiv({ text: g, cls: 'memex-todo-group' });
+						cell.createDiv({ text: g, cls: 'memex-todo-group' });
 					}
-					const row = root.createDiv('memex-todo-row');
-					const chk = row.createSpan('memex-check');
-					chk.setText('○');
+					const row = cell.createDiv('memex-todo-row');
+					row.createDiv('memex-quad-check');
 					row.createSpan({ text: it.title, cls: 'tt' });
 					row.onclick = () => void this.app.workspace.getLeaf(true).openFile(todoFile);
 					if (it.note) {
-						const n = root.createDiv('memex-todo-note');
+						const n = cell.createDiv('memex-todo-note');
 						n.setText(it.note);
 					}
 				}
 			}
+			root.createDiv({ text: '已完成不列出，只计个数。点任务打开待办清单原文。', cls: 'memex-empty' });
 		}
-
 		root.createDiv({ text: '快捷入口', cls: 'memex-sec' });
 		const actions = root.createDiv('memex-actions');
 		const mkBtn = (emoji: string, label: string, fn: () => void) => {

@@ -226,6 +226,7 @@ var HomeView = class extends import_obsidian.ItemView {
     return `${fmtDate(d)} \xB7 \u661F\u671F${week}`;
   }
   async render() {
+    var _a;
     const root = this.containerEl.children[1];
     root.empty();
     root.addClass("memex-home");
@@ -255,13 +256,31 @@ var HomeView = class extends import_obsidian.ItemView {
 .memex-row .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .memex-row .m { font-size: 12px; color: var(--text-faint); white-space: nowrap; }
 .memex-empty { color: var(--text-faint); font-size: 13px; padding: 8px 4px; }
-.memex-todo-sec { font-size: 13px; font-weight: 700; color: var(--text-muted); margin: 16px 0 4px; }
-.memex-todo-group { font-size: 13px; font-weight: 700; margin: 12px 0 2px; }
-.memex-todo-row { display: flex; gap: 10px; align-items: baseline; padding: 8px 4px;
-  border-bottom: 1px solid var(--background-modifier-border); cursor: pointer; }
-.memex-check { font-size: 16px; color: var(--text-muted); line-height: 1; }
-.memex-todo-row .tt { flex: 1; }
-.memex-todo-note { color: var(--text-muted); font-size: 12px; padding: 0 4px 8px 32px; }
+.memex-quad-axes { color: var(--text-muted); font-size: 13px; margin: 0 0 16px; }
+.memex-quad-grid { display: grid; grid-template-columns: 1fr 1fr; }
+.memex-quad-cell { padding: 20px 20px 20px 0; }
+.memex-quad-cell:nth-child(odd) { padding-right: 20px; border-right: 1px solid var(--background-modifier-border); }
+.memex-quad-cell:nth-child(even) { padding-left: 20px; }
+.memex-quad-cell:nth-child(1), .memex-quad-cell:nth-child(2) { border-bottom: 1px solid var(--background-modifier-border); }
+.memex-quad-head { display: flex; gap: 8px; align-items: baseline; margin-bottom: 4px; }
+.memex-quad-head .icon { font-size: 18px; }
+.memex-quad-head .name { font-size: 15px; font-weight: 700; }
+.memex-quad-desc { color: var(--text-muted); font-size: 12px; margin-bottom: 8px; }
+.memex-todo-group { font-size: 13px; font-weight: 700; margin: 14px 0 4px; }
+.memex-todo-row { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; cursor: pointer; }
+.memex-quad-check { flex: none; width: 18px; height: 18px; border-radius: 50%; border: 2px solid; margin-top: 2px; box-sizing: border-box; }
+.memex-q1 .memex-quad-check { border-color: #e5484d; }
+.memex-q2 .memex-quad-check { border-color: #2aa79b; }
+.memex-q3 .memex-quad-check { border-color: #D0A215; }
+.memex-q4 .memex-quad-check { border-color: #8a8a8a; }
+.memex-todo-row .tt { flex: 1; font-size: 14px; line-height: 1.6; }
+.memex-todo-note { color: var(--text-muted); font-size: 12px; line-height: 1.6; margin: -2px 0 6px 32px; }
+@media (max-width: 600px) {
+  .memex-quad-grid { grid-template-columns: 1fr; }
+  .memex-quad-cell:nth-child(odd) { border-right: none; padding-right: 0; }
+  .memex-quad-cell:nth-child(even) { padding-left: 0; }
+  .memex-quad-cell:nth-child(3) { border-bottom: 1px solid var(--background-modifier-border); }
+}
 `;
     const hero = root.createDiv("memex-hero");
     hero.createEl("h1", { text: `${this.greeting()}\uFF0C\u4ECA\u5929\u4E5F\u5199\u4E00\u70B9\u5427`, cls: "memex-hello" });
@@ -270,8 +289,8 @@ var HomeView = class extends import_obsidian.ItemView {
     const files = this.app.vault.getMarkdownFiles();
     const notes = files.filter((f) => f.path.startsWith("notes/"));
     const fm = (f) => {
-      var _a, _b;
-      return (_b = (_a = this.app.metadataCache.getFileCache(f)) == null ? void 0 : _a.frontmatter) != null ? _b : {};
+      var _a2, _b;
+      return (_b = (_a2 = this.app.metadataCache.getFileCache(f)) == null ? void 0 : _a2.frontmatter) != null ? _b : {};
     };
     const isIndex = (f) => f.basename.startsWith("\u7D22\u5F15-") || f.basename === "\u5F85\u529E\u6E05\u5355";
     const inboxCount = files.filter((f) => /^inbox\/[^/]+\.md$/.test(f.path)).length;
@@ -311,7 +330,18 @@ var HomeView = class extends import_obsidian.ItemView {
     mkCap("memex", "\u7D22\u5F15-memex");
     if (todoFile) {
       const text = await this.app.vault.read(todoFile);
-      const sections = [];
+      const quads = [
+        { key: "q1", icon: "\u{1F525}", name: "\u91CD\u8981\u4E14\u7D27\u6025", desc: "\u5148\u505A\u8FD9\u4EF6\uFF0C\u9519\u8FC7\u7A97\u53E3\u5C31\u6CA1\u610F\u4E49", items: [] },
+        { key: "q2", icon: "\u{1F3AF}", name: "\u91CD\u8981\u4E0D\u7D27\u6025", desc: "\u7CFB\u7EDF\u5730\u57FA\uFF0C\u503C\u5F97\u4E13\u95E8\u7559\u65F6\u95F4\u505A", items: [] },
+        { key: "q3", icon: "\u26A1", name: "\u7D27\u6025\u4E0D\u91CD\u8981", desc: "\u5C0F\u4E8B\uFF0C\u4E0B\u6B21\u5916\u62CD\u524D\u987A\u624B\u8BBE\u6389", items: [] },
+        { key: "q4", icon: "\u{1F33F}", name: "\u4E0D\u91CD\u8981\u4E0D\u7D27\u6025", desc: "\u5148\u653E\u7740\uFF0C\u4E0D\u5360\u4ECA\u65E5\u548C\u968F\u65F6", items: [] }
+      ];
+      const byName = {
+        "\u91CD\u8981\u4E14\u7D27\u6025": quads[0],
+        "\u91CD\u8981\u4E0D\u7D27\u6025": quads[1],
+        "\u7D27\u6025\u4E0D\u91CD\u8981": quads[2],
+        "\u4E0D\u91CD\u8981\u4E0D\u7D27\u6025": quads[3]
+      };
       let cur = null;
       let curGroup = "";
       let last = null;
@@ -319,17 +349,13 @@ var HomeView = class extends import_obsidian.ItemView {
         const line = raw.trimEnd();
         const h = line.match(/^## (.+)$/);
         if (h) {
-          if (["\u4ECA\u65E5", "\u5373\u5C06\u5230\u6765", "\u968F\u65F6", "\u67D0\u5929", "\u5DF2\u5B8C\u6210"].includes(h[1].trim())) {
-            cur = { name: h[1].trim(), items: [] };
-            sections.push(cur);
-            curGroup = "";
-            last = null;
-          } else {
-            cur = null;
-          }
+          const name = h[1].replace(/[^\u4e00-\u9fa5]/g, "");
+          cur = (_a = byName[name]) != null ? _a : null;
+          curGroup = "";
+          last = null;
           continue;
         }
-        if (!cur || cur.name === "\u5DF2\u5B8C\u6210") continue;
+        if (!cur) continue;
         const sub = line.match(/^### (.+)$/);
         if (sub) {
           curGroup = sub[1].trim();
@@ -350,36 +376,34 @@ var HomeView = class extends import_obsidian.ItemView {
           last.note = note[1].trim().replace(/\[\[([^\]]+)\]\]/g, "$1");
           continue;
         }
-        if (line && line.trim().length <= 12 && !line.startsWith(">") && !line.startsWith("\u6765\u6E90\uFF1A") && !line.startsWith("-")) {
-          curGroup = line.trim();
-        }
       }
       root.createDiv({ text: "\u5F85\u529E", cls: "memex-sec" });
       root.createDiv({ text: "\u53EA\u8BFB\u5217\u8868\uFF0C\u52FE\u9009\u8BF7\u5230\u539F\u6587\u91CC\u52FE", cls: "memex-empty" });
-      for (const s of sections) {
-        if (s.name === "\u5DF2\u5B8C\u6210") continue;
-        root.createDiv({ text: s.name, cls: "memex-todo-sec" });
-        if (s.items.length === 0) {
-          root.createDiv({ text: s.name === "\u4ECA\u65E5" ? "\u4ECA\u65E5\u6CA1\u6709\u5230\u671F\u9879" : "\u6682\u65E0", cls: "memex-empty" });
-          continue;
-        }
+      root.createDiv({ text: "\u6A2A\u8F74\uFF1A\u7D27\u6025 \u2192 \u4E0D\u7D27\u6025\u3000\xB7\u3000\u7EB5\u8F74\uFF1A\u91CD\u8981 \u2192 \u4E0D\u91CD\u8981", cls: "memex-quad-axes" });
+      const grid = root.createDiv("memex-quad-grid");
+      for (const q of quads) {
+        const cell = grid.createDiv(`memex-quad-cell memex-${q.key}`);
+        const head = cell.createDiv("memex-quad-head");
+        head.createSpan({ text: q.icon, cls: "icon" });
+        head.createSpan({ text: `${q.name} \xB7 ${q.items.length}`, cls: "name" });
+        cell.createDiv({ text: q.desc, cls: "memex-quad-desc" });
         let g = "";
-        for (const it of s.items) {
+        for (const it of q.items) {
           if (it.group && it.group !== g) {
             g = it.group;
-            root.createDiv({ text: g, cls: "memex-todo-group" });
+            cell.createDiv({ text: g, cls: "memex-todo-group" });
           }
-          const row = root.createDiv("memex-todo-row");
-          const chk = row.createSpan("memex-check");
-          chk.setText("\u25CB");
+          const row = cell.createDiv("memex-todo-row");
+          row.createDiv("memex-quad-check");
           row.createSpan({ text: it.title, cls: "tt" });
           row.onclick = () => void this.app.workspace.getLeaf(true).openFile(todoFile);
           if (it.note) {
-            const n = root.createDiv("memex-todo-note");
+            const n = cell.createDiv("memex-todo-note");
             n.setText(it.note);
           }
         }
       }
+      root.createDiv({ text: "\u5DF2\u5B8C\u6210\u4E0D\u5217\u51FA\uFF0C\u53EA\u8BA1\u4E2A\u6570\u3002\u70B9\u4EFB\u52A1\u6253\u5F00\u5F85\u529E\u6E05\u5355\u539F\u6587\u3002", cls: "memex-empty" });
     }
     root.createDiv({ text: "\u5FEB\u6377\u5165\u53E3", cls: "memex-sec" });
     const actions = root.createDiv("memex-actions");
