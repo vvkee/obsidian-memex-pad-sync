@@ -229,8 +229,14 @@ class HomeView extends ItemView {
 .memex-cap { border: 1px solid var(--background-modifier-border); background: var(--background-secondary);
   border-radius: 999px; padding: 6px 14px; font-size: 13px; cursor: pointer; }
 .memex-cap:hover { background: var(--background-modifier-hover); }
-.memex-stats { display: flex; gap: 10px; margin: 18px 0; }
-.memex-stat { flex: 1; background: var(--background-secondary); border-radius: 10px; padding: 12px 14px; }
+.memex-panel { background: var(--background-secondary); border-radius: 12px; padding: 20px 24px; margin-bottom: 20px; }
+.memex-panel-head { display: flex; gap: 10px; align-items: baseline; margin-bottom: 16px; }
+.memex-panel-head .icon { font-size: 18px; }
+.memex-panel-head .title { font-size: 15px; font-weight: 700; }
+.memex-panel-head .sub { font-size: 12px; color: var(--text-muted); margin-left: auto; white-space: nowrap; }
+.memex-panel .memex-btn { background: var(--background-primary); }
+.memex-stats { display: flex; gap: 10px; }
+.memex-stat { flex: 1; text-align: center; }
 .memex-stat .n { font-size: 22px; font-weight: 700; }
 .memex-stat .l { font-size: 12px; color: var(--text-muted); }
 .memex-sec { font-size: 13px; font-weight: 700; color: var(--text-muted); margin: 20px 0 10px; }
@@ -239,8 +245,7 @@ class HomeView extends ItemView {
   border-radius: 12px; padding: 16px 8px; text-align: center; cursor: pointer; font-size: 14px; }
 .memex-btn:hover { background: var(--background-modifier-hover); }
 .memex-btn .e { font-size: 22px; display: block; margin-bottom: 6px; }
-.memex-row { display: flex; align-items: baseline; gap: 10px; padding: 9px 4px;
-  border-bottom: 1px solid var(--background-modifier-border); cursor: pointer; }
+.memex-row { display: flex; align-items: baseline; gap: 10px; padding: 9px 0; cursor: pointer; }
 .memex-row:hover .t { color: var(--text-accent); }
 .memex-row .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .memex-row .m { font-size: 12px; color: var(--text-faint); white-space: nowrap; }
@@ -263,12 +268,16 @@ class HomeView extends ItemView {
 .memex-q3 .memex-quad-check { border-color: #D0A215; }
 .memex-q4 .memex-quad-check { border-color: #8a8a8a; }
 .memex-todo-row .tt { flex: 1; font-size: 14px; line-height: 1.6; }
+.memex-todo-row .m { font-size: 12px; color: var(--text-faint); white-space: nowrap; }
+.memex-q1-check { border-color: #e5484d; }
+.memex-focus-title { flex: 1; font-size: 17px; line-height: 1.6; }
+.memex-focus-note { color: var(--text-muted); font-size: 13px; line-height: 1.6; margin: 8px 0 0 32px; }
 .memex-todo-note { color: var(--text-muted); font-size: 12px; line-height: 1.6; margin: -2px 0 6px 32px; }
 @media (max-width: 600px) {
-  .memex-quad-grid { grid-template-columns: 1fr; }
-  .memex-quad-cell:nth-child(odd) { border-right: none; padding-right: 0; }
-  .memex-quad-cell:nth-child(even) { padding-left: 0; }
-  .memex-quad-cell:nth-child(3) { border-bottom: 1px solid var(--background-modifier-border); }
+  .memex-quad-cell { padding: 12px 12px 12px 0; }
+  .memex-quad-cell:nth-child(odd) { padding-right: 12px; }
+  .memex-quad-cell:nth-child(even) { padding-left: 12px; }
+  .memex-todo-row .tt { font-size: 13px; }
 }
 `;
 
@@ -287,14 +296,36 @@ class HomeView extends ItemView {
 		const pending = notes.filter((f) => fm(f).status === '待确认');
 		const lastSync = this.plugin.data.state.lastSyncAt;
 
-		const stats = root.createDiv('memex-stats');
+		const mkPanel = (icon: string, title: string, sub?: string) => {
+			const p = root.createDiv('memex-panel');
+			const h = p.createDiv('memex-panel-head');
+			h.createSpan({ text: icon, cls: 'icon' });
+			h.createSpan({ text: title, cls: 'title' });
+			if (sub) h.createSpan({ text: sub, cls: 'sub' });
+			return p;
+		};
+		const todoFile = files.find((f) => f.basename === '待办清单');
+		// 快捷入口置顶：问候语下面第一块。
+		const actPanel = mkPanel('⚡', '快捷入口');
+		const actions = actPanel.createDiv('memex-actions');
+		const mkBtn = (emoji: string, label: string, fn: () => void) => {
+			const b = actions.createDiv('memex-btn');
+			b.createSpan({ text: emoji, cls: 'e' });
+			b.createSpan({ text: label });
+			b.onclick = fn;
+		};
+		mkBtn('✏️', '新建长文', () => this.plugin.newNoteFlow());
+		mkBtn('📖', '今日 digest', () => void this.plugin.openTodayDigest());
+		mkBtn('↻', '立即同步', () => void this.plugin.fullSync(true));
+
+		const statPanel = mkPanel('📊', '概览');
+		const stats = statPanel.createDiv('memex-stats');
 		const mkStat = (n: string, l: string, f?: TFile) => {
 			const s = stats.createDiv('memex-stat');
 			s.createDiv({ text: n, cls: 'n' });
 			s.createDiv({ text: l, cls: 'l' });
 			if (f) s.onclick = () => void this.app.workspace.getLeaf(true).openFile(f);
 		};
-		const todoFile = files.find((f) => f.basename === '待办清单');
 		mkStat(String(inProgress.length), '进行中', undefined);
 		mkStat(String(pending.length), '待确认', undefined);
 		mkStat(String(inboxCount), 'inbox 待处理', undefined);
@@ -304,10 +335,9 @@ class HomeView extends ItemView {
 			s.createDiv({ text: '待办清单', cls: 'l' });
 			s.onclick = () => void this.app.workspace.getLeaf(true).openFile(todoFile);
 		}
-		root.createDiv({ text: `上次同步：${lastSync ? relTime(lastSync) : '—'}`, cls: 'memex-sec' });
 
-		root.createDiv({ text: '目标', cls: 'memex-sec' });
-		const caps = root.createDiv('memex-caps');
+		const goalPanel = mkPanel('🎯', '目标');
+		const caps = goalPanel.createDiv('memex-caps');
 		const mkCap = (label: string, basename: string) => {
 			const f = files.find((x) => x.basename === basename);
 			if (!f) return;
@@ -320,17 +350,17 @@ class HomeView extends ItemView {
 		mkCap('旅行', '索引-旅行');
 		mkCap('memex', '索引-memex');
 
-		// 待办：四象限矩阵，只读。解析 notes/待办清单.md 的象限分区，勾选请到原文。
+		// 待办解析：四象限，只读，勾选请到原文。解析一次，供焦点块和全量块共用。
+		type TodoItem = { title: string; note: string; group: string };
+		type Quad = { key: string; icon: string; name: string; items: TodoItem[] };
+		const quads: Quad[] = [
+			{ key: 'q1', icon: '🔥', name: '重要且紧急', items: [] },
+			{ key: 'q2', icon: '🎯', name: '重要不紧急', items: [] },
+			{ key: 'q3', icon: '⚡', name: '紧急不重要', items: [] },
+			{ key: 'q4', icon: '🌿', name: '不重要不紧急', items: [] },
+		];
 		if (todoFile) {
 			const text = await this.app.vault.read(todoFile);
-			type TodoItem = { title: string; note: string; group: string };
-			type Quad = { key: string; icon: string; name: string; desc: string; items: TodoItem[] };
-			const quads: Quad[] = [
-				{ key: 'q1', icon: '🔥', name: '重要且紧急', desc: '先做这件，错过窗口就没意义', items: [] },
-				{ key: 'q2', icon: '🎯', name: '重要不紧急', desc: '系统地基，值得专门留时间做', items: [] },
-				{ key: 'q3', icon: '⚡', name: '紧急不重要', desc: '小事，下次外拍前顺手设掉', items: [] },
-				{ key: 'q4', icon: '🌿', name: '不重要不紧急', desc: '先放着，不占今日和随时', items: [] },
-			];
 			const byName: Record<string, Quad> = {
 				'重要且紧急': quads[0], '重要不紧急': quads[1],
 				'紧急不重要': quads[2], '不重要不紧急': quads[3],
@@ -370,16 +400,55 @@ class HomeView extends ItemView {
 					continue;
 				}
 			}
-			root.createDiv({ text: '待办', cls: 'memex-sec' });
-			root.createDiv({ text: '只读列表，勾选请到原文里勾', cls: 'memex-empty' });
-			root.createDiv({ text: '横轴：紧急 → 不紧急　·　纵轴：重要 → 不重要', cls: 'memex-quad-axes' });
-			const grid = root.createDiv('memex-quad-grid');
+		}
+
+		// 🔥 焦点块：紧贴在目标下面，只展开重要且紧急，备注只在这里展开。
+		if (todoFile && quads[0].items.length > 0) {
+			const focus = mkPanel('🔥', '今天先做这件', `重要且紧急 · ${quads[0].items.length}`);
+			for (const it of quads[0].items) {
+				const row = focus.createDiv('memex-todo-row');
+				row.createDiv('memex-quad-check memex-q1-check');
+				row.createSpan({ text: it.title, cls: 'memex-focus-title' });
+				row.onclick = () => void this.app.workspace.getLeaf(true).openFile(todoFile);
+				if (it.note) {
+					const n = focus.createDiv('memex-focus-note');
+					n.setText(it.note);
+				}
+			}
+		}
+
+		const mkList = (icon: string, title: string, list: TFile[], empty: string, sub?: string) => {
+			const p = mkPanel(icon, title, sub);
+			if (list.length === 0) {
+				p.createDiv({ text: empty, cls: 'memex-empty' });
+				return;
+			}
+			for (const f of list) {
+				const row = p.createDiv('memex-row');
+				row.createSpan({ text: f.basename, cls: 't' });
+				row.createSpan({ text: relTime(f.stat.mtime), cls: 'm' });
+				row.onclick = () => void this.app.workspace.getLeaf(true).openFile(f);
+			}
+		};
+		const byMtime = (a: TFile, b: TFile) => b.stat.mtime - a.stat.mtime;
+		// 进行中：不是阅读进度追踪，只是把 status=进行中的正文笔记排前面，供继续推进。
+		mkList('🔄', '进行中', [...inProgress].sort(byMtime).slice(0, 5), '没有进行中的笔记',
+			inProgress.length > 5 ? `还有 ${inProgress.length - 5} 篇` : undefined);
+		mkList('❓', '待确认', [...pending].sort(byMtime).slice(0, 5), '没有待确认的笔记');
+		mkList('🕘', '最近笔记', [...notes].sort(byMtime).slice(0, 8), '还没有笔记');
+
+		// 待办 · 四象限全量：放最后，一整块面板里套坐标轴 2×2 网格，不平铺。
+		// 网格里不展开备注，只留标题和时间，到原文里看备注。
+		if (todoFile) {
+			const total = quads.reduce((a, q) => a + q.items.length, 0);
+			const qp = mkPanel('✅', '待办 · 四象限全量', `${total} · 只读，勾选请到原文`);
+			qp.createDiv({ text: '横轴：紧急 → 不紧急　·　纵轴：重要 → 不重要', cls: 'memex-quad-axes' });
+			const grid = qp.createDiv('memex-quad-grid');
 			for (const q of quads) {
 				const cell = grid.createDiv(`memex-quad-cell memex-${q.key}`);
 				const head = cell.createDiv('memex-quad-head');
 				head.createSpan({ text: q.icon, cls: 'icon' });
 				head.createSpan({ text: `${q.name} · ${q.items.length}`, cls: 'name' });
-				cell.createDiv({ text: q.desc, cls: 'memex-quad-desc' });
 				let g = '';
 				for (const it of q.items) {
 					if (it.group && it.group !== g) {
@@ -389,45 +458,14 @@ class HomeView extends ItemView {
 					const row = cell.createDiv('memex-todo-row');
 					row.createDiv('memex-quad-check');
 					row.createSpan({ text: it.title, cls: 'tt' });
+					const meta = it.note.match(/^(\d+\/\d+|每周)/);
+					if (meta) row.createSpan({ text: meta[1], cls: 'm' });
 					row.onclick = () => void this.app.workspace.getLeaf(true).openFile(todoFile);
-					if (it.note) {
-						const n = cell.createDiv('memex-todo-note');
-						n.setText(it.note);
-					}
 				}
 			}
-			root.createDiv({ text: '已完成不列出，只计个数。点任务打开待办清单原文。', cls: 'memex-empty' });
+			qp.createDiv({ text: '坐标轴块里备注不再展开，只留标题和时间。已完成不列出，只计个数。', cls: 'memex-empty' });
 		}
-		root.createDiv({ text: '快捷入口', cls: 'memex-sec' });
-		const actions = root.createDiv('memex-actions');
-		const mkBtn = (emoji: string, label: string, fn: () => void) => {
-			const b = actions.createDiv('memex-btn');
-			b.createSpan({ text: emoji, cls: 'e' });
-			b.createSpan({ text: label });
-			b.onclick = fn;
-		};
-		mkBtn('✏️', '新建长文', () => this.plugin.newNoteFlow());
-		mkBtn('📖', '今日 digest', () => void this.plugin.openTodayDigest());
-		mkBtn('↻', '立即同步', () => void this.plugin.fullSync(true));
-
-		const mkList = (title: string, list: TFile[], empty: string) => {
-			root.createDiv({ text: title, cls: 'memex-sec' });
-			if (list.length === 0) {
-				root.createDiv({ text: empty, cls: 'memex-empty' });
-				return;
-			}
-			for (const f of list) {
-				const row = root.createDiv('memex-row');
-				row.createSpan({ text: f.basename, cls: 't' });
-				row.createSpan({ text: relTime(f.stat.mtime), cls: 'm' });
-				row.onclick = () => void this.app.workspace.getLeaf(true).openFile(f);
-			}
-		};
-		const byMtime = (a: TFile, b: TFile) => b.stat.mtime - a.stat.mtime;
-		// 进行中：不是阅读进度追踪，只是把 status=进行中的正文笔记排前面，供继续推进。
-		mkList('进行中', [...inProgress].sort(byMtime).slice(0, 5), '没有进行中的笔记');
-		mkList('待确认', [...pending].sort(byMtime).slice(0, 5), '没有待确认的笔记');
-		mkList('最近笔记', [...notes].sort(byMtime).slice(0, 8), '还没有笔记');
+		root.createDiv({ text: `上次同步：${lastSync ? relTime(lastSync) : '—'}`, cls: 'memex-empty' });
 	}
 }
 

@@ -240,8 +240,14 @@ var HomeView = class extends import_obsidian.ItemView {
 .memex-cap { border: 1px solid var(--background-modifier-border); background: var(--background-secondary);
   border-radius: 999px; padding: 6px 14px; font-size: 13px; cursor: pointer; }
 .memex-cap:hover { background: var(--background-modifier-hover); }
-.memex-stats { display: flex; gap: 10px; margin: 18px 0; }
-.memex-stat { flex: 1; background: var(--background-secondary); border-radius: 10px; padding: 12px 14px; }
+.memex-panel { background: var(--background-secondary); border-radius: 12px; padding: 20px 24px; margin-bottom: 20px; }
+.memex-panel-head { display: flex; gap: 10px; align-items: baseline; margin-bottom: 16px; }
+.memex-panel-head .icon { font-size: 18px; }
+.memex-panel-head .title { font-size: 15px; font-weight: 700; }
+.memex-panel-head .sub { font-size: 12px; color: var(--text-muted); margin-left: auto; white-space: nowrap; }
+.memex-panel .memex-btn { background: var(--background-primary); }
+.memex-stats { display: flex; gap: 10px; }
+.memex-stat { flex: 1; text-align: center; }
 .memex-stat .n { font-size: 22px; font-weight: 700; }
 .memex-stat .l { font-size: 12px; color: var(--text-muted); }
 .memex-sec { font-size: 13px; font-weight: 700; color: var(--text-muted); margin: 20px 0 10px; }
@@ -250,8 +256,7 @@ var HomeView = class extends import_obsidian.ItemView {
   border-radius: 12px; padding: 16px 8px; text-align: center; cursor: pointer; font-size: 14px; }
 .memex-btn:hover { background: var(--background-modifier-hover); }
 .memex-btn .e { font-size: 22px; display: block; margin-bottom: 6px; }
-.memex-row { display: flex; align-items: baseline; gap: 10px; padding: 9px 4px;
-  border-bottom: 1px solid var(--background-modifier-border); cursor: pointer; }
+.memex-row { display: flex; align-items: baseline; gap: 10px; padding: 9px 0; cursor: pointer; }
 .memex-row:hover .t { color: var(--text-accent); }
 .memex-row .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .memex-row .m { font-size: 12px; color: var(--text-faint); white-space: nowrap; }
@@ -274,12 +279,16 @@ var HomeView = class extends import_obsidian.ItemView {
 .memex-q3 .memex-quad-check { border-color: #D0A215; }
 .memex-q4 .memex-quad-check { border-color: #8a8a8a; }
 .memex-todo-row .tt { flex: 1; font-size: 14px; line-height: 1.6; }
+.memex-todo-row .m { font-size: 12px; color: var(--text-faint); white-space: nowrap; }
+.memex-q1-check { border-color: #e5484d; }
+.memex-focus-title { flex: 1; font-size: 17px; line-height: 1.6; }
+.memex-focus-note { color: var(--text-muted); font-size: 13px; line-height: 1.6; margin: 8px 0 0 32px; }
 .memex-todo-note { color: var(--text-muted); font-size: 12px; line-height: 1.6; margin: -2px 0 6px 32px; }
 @media (max-width: 600px) {
-  .memex-quad-grid { grid-template-columns: 1fr; }
-  .memex-quad-cell:nth-child(odd) { border-right: none; padding-right: 0; }
-  .memex-quad-cell:nth-child(even) { padding-left: 0; }
-  .memex-quad-cell:nth-child(3) { border-bottom: 1px solid var(--background-modifier-border); }
+  .memex-quad-cell { padding: 12px 12px 12px 0; }
+  .memex-quad-cell:nth-child(odd) { padding-right: 12px; }
+  .memex-quad-cell:nth-child(even) { padding-left: 12px; }
+  .memex-todo-row .tt { font-size: 13px; }
 }
 `;
     const hero = root.createDiv("memex-hero");
@@ -297,14 +306,34 @@ var HomeView = class extends import_obsidian.ItemView {
     const inProgress = notes.filter((f) => fm(f).status === "\u8FDB\u884C\u4E2D" && !isIndex(f));
     const pending = notes.filter((f) => fm(f).status === "\u5F85\u786E\u8BA4");
     const lastSync = this.plugin.data.state.lastSyncAt;
-    const stats = root.createDiv("memex-stats");
+    const mkPanel = (icon, title, sub) => {
+      const p = root.createDiv("memex-panel");
+      const h = p.createDiv("memex-panel-head");
+      h.createSpan({ text: icon, cls: "icon" });
+      h.createSpan({ text: title, cls: "title" });
+      if (sub) h.createSpan({ text: sub, cls: "sub" });
+      return p;
+    };
+    const todoFile = files.find((f) => f.basename === "\u5F85\u529E\u6E05\u5355");
+    const actPanel = mkPanel("\u26A1", "\u5FEB\u6377\u5165\u53E3");
+    const actions = actPanel.createDiv("memex-actions");
+    const mkBtn = (emoji, label, fn) => {
+      const b = actions.createDiv("memex-btn");
+      b.createSpan({ text: emoji, cls: "e" });
+      b.createSpan({ text: label });
+      b.onclick = fn;
+    };
+    mkBtn("\u270F\uFE0F", "\u65B0\u5EFA\u957F\u6587", () => this.plugin.newNoteFlow());
+    mkBtn("\u{1F4D6}", "\u4ECA\u65E5 digest", () => void this.plugin.openTodayDigest());
+    mkBtn("\u21BB", "\u7ACB\u5373\u540C\u6B65", () => void this.plugin.fullSync(true));
+    const statPanel = mkPanel("\u{1F4CA}", "\u6982\u89C8");
+    const stats = statPanel.createDiv("memex-stats");
     const mkStat = (n, l, f) => {
       const s = stats.createDiv("memex-stat");
       s.createDiv({ text: n, cls: "n" });
       s.createDiv({ text: l, cls: "l" });
       if (f) s.onclick = () => void this.app.workspace.getLeaf(true).openFile(f);
     };
-    const todoFile = files.find((f) => f.basename === "\u5F85\u529E\u6E05\u5355");
     mkStat(String(inProgress.length), "\u8FDB\u884C\u4E2D", void 0);
     mkStat(String(pending.length), "\u5F85\u786E\u8BA4", void 0);
     mkStat(String(inboxCount), "inbox \u5F85\u5904\u7406", void 0);
@@ -314,9 +343,8 @@ var HomeView = class extends import_obsidian.ItemView {
       s.createDiv({ text: "\u5F85\u529E\u6E05\u5355", cls: "l" });
       s.onclick = () => void this.app.workspace.getLeaf(true).openFile(todoFile);
     }
-    root.createDiv({ text: `\u4E0A\u6B21\u540C\u6B65\uFF1A${lastSync ? relTime(lastSync) : "\u2014"}`, cls: "memex-sec" });
-    root.createDiv({ text: "\u76EE\u6807", cls: "memex-sec" });
-    const caps = root.createDiv("memex-caps");
+    const goalPanel = mkPanel("\u{1F3AF}", "\u76EE\u6807");
+    const caps = goalPanel.createDiv("memex-caps");
     const mkCap = (label, basename) => {
       const f = files.find((x) => x.basename === basename);
       if (!f) return;
@@ -328,14 +356,14 @@ var HomeView = class extends import_obsidian.ItemView {
     mkCap("\u6444\u5F71", "\u7D22\u5F15-\u6444\u5F71");
     mkCap("\u65C5\u884C", "\u7D22\u5F15-\u65C5\u884C");
     mkCap("memex", "\u7D22\u5F15-memex");
+    const quads = [
+      { key: "q1", icon: "\u{1F525}", name: "\u91CD\u8981\u4E14\u7D27\u6025", items: [] },
+      { key: "q2", icon: "\u{1F3AF}", name: "\u91CD\u8981\u4E0D\u7D27\u6025", items: [] },
+      { key: "q3", icon: "\u26A1", name: "\u7D27\u6025\u4E0D\u91CD\u8981", items: [] },
+      { key: "q4", icon: "\u{1F33F}", name: "\u4E0D\u91CD\u8981\u4E0D\u7D27\u6025", items: [] }
+    ];
     if (todoFile) {
       const text = await this.app.vault.read(todoFile);
-      const quads = [
-        { key: "q1", icon: "\u{1F525}", name: "\u91CD\u8981\u4E14\u7D27\u6025", desc: "\u5148\u505A\u8FD9\u4EF6\uFF0C\u9519\u8FC7\u7A97\u53E3\u5C31\u6CA1\u610F\u4E49", items: [] },
-        { key: "q2", icon: "\u{1F3AF}", name: "\u91CD\u8981\u4E0D\u7D27\u6025", desc: "\u7CFB\u7EDF\u5730\u57FA\uFF0C\u503C\u5F97\u4E13\u95E8\u7559\u65F6\u95F4\u505A", items: [] },
-        { key: "q3", icon: "\u26A1", name: "\u7D27\u6025\u4E0D\u91CD\u8981", desc: "\u5C0F\u4E8B\uFF0C\u4E0B\u6B21\u5916\u62CD\u524D\u987A\u624B\u8BBE\u6389", items: [] },
-        { key: "q4", icon: "\u{1F33F}", name: "\u4E0D\u91CD\u8981\u4E0D\u7D27\u6025", desc: "\u5148\u653E\u7740\uFF0C\u4E0D\u5360\u4ECA\u65E5\u548C\u968F\u65F6", items: [] }
-      ];
       const byName = {
         "\u91CD\u8981\u4E14\u7D27\u6025": quads[0],
         "\u91CD\u8981\u4E0D\u7D27\u6025": quads[1],
@@ -377,16 +405,53 @@ var HomeView = class extends import_obsidian.ItemView {
           continue;
         }
       }
-      root.createDiv({ text: "\u5F85\u529E", cls: "memex-sec" });
-      root.createDiv({ text: "\u53EA\u8BFB\u5217\u8868\uFF0C\u52FE\u9009\u8BF7\u5230\u539F\u6587\u91CC\u52FE", cls: "memex-empty" });
-      root.createDiv({ text: "\u6A2A\u8F74\uFF1A\u7D27\u6025 \u2192 \u4E0D\u7D27\u6025\u3000\xB7\u3000\u7EB5\u8F74\uFF1A\u91CD\u8981 \u2192 \u4E0D\u91CD\u8981", cls: "memex-quad-axes" });
-      const grid = root.createDiv("memex-quad-grid");
+    }
+    if (todoFile && quads[0].items.length > 0) {
+      const focus = mkPanel("\u{1F525}", "\u4ECA\u5929\u5148\u505A\u8FD9\u4EF6", `\u91CD\u8981\u4E14\u7D27\u6025 \xB7 ${quads[0].items.length}`);
+      for (const it of quads[0].items) {
+        const row = focus.createDiv("memex-todo-row");
+        row.createDiv("memex-quad-check memex-q1-check");
+        row.createSpan({ text: it.title, cls: "memex-focus-title" });
+        row.onclick = () => void this.app.workspace.getLeaf(true).openFile(todoFile);
+        if (it.note) {
+          const n = focus.createDiv("memex-focus-note");
+          n.setText(it.note);
+        }
+      }
+    }
+    const mkList = (icon, title, list, empty, sub) => {
+      const p = mkPanel(icon, title, sub);
+      if (list.length === 0) {
+        p.createDiv({ text: empty, cls: "memex-empty" });
+        return;
+      }
+      for (const f of list) {
+        const row = p.createDiv("memex-row");
+        row.createSpan({ text: f.basename, cls: "t" });
+        row.createSpan({ text: relTime(f.stat.mtime), cls: "m" });
+        row.onclick = () => void this.app.workspace.getLeaf(true).openFile(f);
+      }
+    };
+    const byMtime = (a, b) => b.stat.mtime - a.stat.mtime;
+    mkList(
+      "\u{1F504}",
+      "\u8FDB\u884C\u4E2D",
+      [...inProgress].sort(byMtime).slice(0, 5),
+      "\u6CA1\u6709\u8FDB\u884C\u4E2D\u7684\u7B14\u8BB0",
+      inProgress.length > 5 ? `\u8FD8\u6709 ${inProgress.length - 5} \u7BC7` : void 0
+    );
+    mkList("\u2753", "\u5F85\u786E\u8BA4", [...pending].sort(byMtime).slice(0, 5), "\u6CA1\u6709\u5F85\u786E\u8BA4\u7684\u7B14\u8BB0");
+    mkList("\u{1F558}", "\u6700\u8FD1\u7B14\u8BB0", [...notes].sort(byMtime).slice(0, 8), "\u8FD8\u6CA1\u6709\u7B14\u8BB0");
+    if (todoFile) {
+      const total = quads.reduce((a, q) => a + q.items.length, 0);
+      const qp = mkPanel("\u2705", "\u5F85\u529E \xB7 \u56DB\u8C61\u9650\u5168\u91CF", `${total} \xB7 \u53EA\u8BFB\uFF0C\u52FE\u9009\u8BF7\u5230\u539F\u6587`);
+      qp.createDiv({ text: "\u6A2A\u8F74\uFF1A\u7D27\u6025 \u2192 \u4E0D\u7D27\u6025\u3000\xB7\u3000\u7EB5\u8F74\uFF1A\u91CD\u8981 \u2192 \u4E0D\u91CD\u8981", cls: "memex-quad-axes" });
+      const grid = qp.createDiv("memex-quad-grid");
       for (const q of quads) {
         const cell = grid.createDiv(`memex-quad-cell memex-${q.key}`);
         const head = cell.createDiv("memex-quad-head");
         head.createSpan({ text: q.icon, cls: "icon" });
         head.createSpan({ text: `${q.name} \xB7 ${q.items.length}`, cls: "name" });
-        cell.createDiv({ text: q.desc, cls: "memex-quad-desc" });
         let g = "";
         for (const it of q.items) {
           if (it.group && it.group !== g) {
@@ -396,43 +461,14 @@ var HomeView = class extends import_obsidian.ItemView {
           const row = cell.createDiv("memex-todo-row");
           row.createDiv("memex-quad-check");
           row.createSpan({ text: it.title, cls: "tt" });
+          const meta = it.note.match(/^(\d+\/\d+|每周)/);
+          if (meta) row.createSpan({ text: meta[1], cls: "m" });
           row.onclick = () => void this.app.workspace.getLeaf(true).openFile(todoFile);
-          if (it.note) {
-            const n = cell.createDiv("memex-todo-note");
-            n.setText(it.note);
-          }
         }
       }
-      root.createDiv({ text: "\u5DF2\u5B8C\u6210\u4E0D\u5217\u51FA\uFF0C\u53EA\u8BA1\u4E2A\u6570\u3002\u70B9\u4EFB\u52A1\u6253\u5F00\u5F85\u529E\u6E05\u5355\u539F\u6587\u3002", cls: "memex-empty" });
+      qp.createDiv({ text: "\u5750\u6807\u8F74\u5757\u91CC\u5907\u6CE8\u4E0D\u518D\u5C55\u5F00\uFF0C\u53EA\u7559\u6807\u9898\u548C\u65F6\u95F4\u3002\u5DF2\u5B8C\u6210\u4E0D\u5217\u51FA\uFF0C\u53EA\u8BA1\u4E2A\u6570\u3002", cls: "memex-empty" });
     }
-    root.createDiv({ text: "\u5FEB\u6377\u5165\u53E3", cls: "memex-sec" });
-    const actions = root.createDiv("memex-actions");
-    const mkBtn = (emoji, label, fn) => {
-      const b = actions.createDiv("memex-btn");
-      b.createSpan({ text: emoji, cls: "e" });
-      b.createSpan({ text: label });
-      b.onclick = fn;
-    };
-    mkBtn("\u270F\uFE0F", "\u65B0\u5EFA\u957F\u6587", () => this.plugin.newNoteFlow());
-    mkBtn("\u{1F4D6}", "\u4ECA\u65E5 digest", () => void this.plugin.openTodayDigest());
-    mkBtn("\u21BB", "\u7ACB\u5373\u540C\u6B65", () => void this.plugin.fullSync(true));
-    const mkList = (title, list, empty) => {
-      root.createDiv({ text: title, cls: "memex-sec" });
-      if (list.length === 0) {
-        root.createDiv({ text: empty, cls: "memex-empty" });
-        return;
-      }
-      for (const f of list) {
-        const row = root.createDiv("memex-row");
-        row.createSpan({ text: f.basename, cls: "t" });
-        row.createSpan({ text: relTime(f.stat.mtime), cls: "m" });
-        row.onclick = () => void this.app.workspace.getLeaf(true).openFile(f);
-      }
-    };
-    const byMtime = (a, b) => b.stat.mtime - a.stat.mtime;
-    mkList("\u8FDB\u884C\u4E2D", [...inProgress].sort(byMtime).slice(0, 5), "\u6CA1\u6709\u8FDB\u884C\u4E2D\u7684\u7B14\u8BB0");
-    mkList("\u5F85\u786E\u8BA4", [...pending].sort(byMtime).slice(0, 5), "\u6CA1\u6709\u5F85\u786E\u8BA4\u7684\u7B14\u8BB0");
-    mkList("\u6700\u8FD1\u7B14\u8BB0", [...notes].sort(byMtime).slice(0, 8), "\u8FD8\u6CA1\u6709\u7B14\u8BB0");
+    root.createDiv({ text: `\u4E0A\u6B21\u540C\u6B65\uFF1A${lastSync ? relTime(lastSync) : "\u2014"}`, cls: "memex-empty" });
   }
 };
 var MemexPadSyncPlugin = class extends import_obsidian.Plugin {
