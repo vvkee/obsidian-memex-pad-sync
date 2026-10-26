@@ -172,7 +172,6 @@ class NewNoteModal extends Modal {
 
 class HomeView extends ItemView {
 	private plugin: MemexPadSyncPlugin;
-	private clockTimer: number | null = null;
 
 	constructor(leaf: WorkspaceLeaf, plugin: MemexPadSyncPlugin) {
 		super(leaf);
@@ -193,14 +192,6 @@ class HomeView extends ItemView {
 
 	async onOpen(): Promise<void> {
 		this.render();
-		this.clockTimer = window.setInterval(() => {
-			const el = this.containerEl.querySelector('.memex-clock');
-			if (el) el.textContent = this.clockText();
-		}, 1000);
-	}
-
-	async onClose(): Promise<void> {
-		if (this.clockTimer !== null) window.clearInterval(this.clockTimer);
 	}
 
 	refresh(): void {
@@ -215,12 +206,6 @@ class HomeView extends ItemView {
 		if (h < 14) return '中午好';
 		if (h < 18) return '下午好';
 		return '晚上好';
-	}
-
-	private clockText(): string {
-		const d = new Date();
-		const p = (n: number) => String(n).padStart(2, '0');
-		return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 	}
 
 	private dateText(): string {
@@ -240,7 +225,10 @@ class HomeView extends ItemView {
 .memex-hero { margin-bottom: 20px; }
 .memex-hello { font-size: 26px; font-weight: 700; margin: 0 0 4px; }
 .memex-date { color: var(--text-muted); font-size: 13px; display:flex; gap:12px; align-items:baseline;}
-.memex-clock { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; margin-left: auto;}
+.memex-caps { display: flex; gap: 8px; flex-wrap: wrap; }
+.memex-cap { border: 1px solid var(--background-modifier-border); background: var(--background-secondary);
+  border-radius: 999px; padding: 6px 14px; font-size: 13px; cursor: pointer; }
+.memex-cap:hover { background: var(--background-modifier-hover); }
 .memex-stats { display: flex; gap: 10px; margin: 18px 0; }
 .memex-stat { flex: 1; background: var(--background-secondary); border-radius: 10px; padding: 12px 14px; }
 .memex-stat .n { font-size: 22px; font-weight: 700; }
@@ -263,22 +251,49 @@ class HomeView extends ItemView {
 		hero.createEl('h1', { text: `${this.greeting()}，今天也写一点吧`, cls: 'memex-hello' });
 		const dateRow = hero.createDiv('memex-date');
 		dateRow.createSpan({ text: this.dateText() });
-		dateRow.createSpan({ text: this.clockText(), cls: 'memex-clock' });
 
 		const files = this.app.vault.getMarkdownFiles();
-		const notesCount = files.filter((f) => f.path.startsWith('notes/')).length;
+		const notes = files.filter((f) => f.path.startsWith('notes/'));
+		const fm = (f: TFile): Record<string, unknown> =>
+			(this.app.metadataCache.getFileCache(f)?.frontmatter ?? {}) as Record<string, unknown>;
+		const isIndex = (f: TFile) => f.basename.startsWith('索引-') || f.basename === '待办清单';
 		const inboxCount = files.filter((f) => /^inbox\/[^/]+\.md$/.test(f.path)).length;
+		const inProgress = notes.filter((f) => fm(f).status === '进行中' && !isIndex(f));
+		const pending = notes.filter((f) => fm(f).status === '待确认');
 		const lastSync = this.plugin.data.state.lastSyncAt;
 
 		const stats = root.createDiv('memex-stats');
-		const mkStat = (n: string, l: string) => {
+		const mkStat = (n: string, l: string, f?: TFile) => {
 			const s = stats.createDiv('memex-stat');
 			s.createDiv({ text: n, cls: 'n' });
 			s.createDiv({ text: l, cls: 'l' });
+			if (f) s.onclick = () => void this.app.workspace.getLeaf(true).openFile(f);
 		};
-		mkStat(String(notesCount), '笔记');
-		mkStat(String(inboxCount), 'inbox 待处理');
-		mkStat(lastSync ? relTime(lastSync) : '—', '上次同步');
+		const todoFile = files.find((f) => f.basename === '待办清单');
+		mkStat(String(inProgress.length), '进行中', undefined);
+		mkStat(String(pending.length), '待确认', undefined);
+		mkStat(String(inboxCount), 'inbox 待处理', undefined);
+		if (todoFile) {
+			const s = stats.createDiv('memex-stat');
+			s.createDiv({ text: '→', cls: 'n' });
+			s.createDiv({ text: '待办清单', cls: 'l' });
+			s.onclick = () => void this.app.workspace.getLeaf(true).openFile(todoFile);
+		}
+		root.createDiv({ text: `上次同步：${lastSync ? relTime(lastSync) : '—'}`, cls: 'memex-sec' });
+
+		root.createDiv({ text: '目标', cls: 'memex-sec' });
+		const caps = root.createDiv('memex-caps');
+		const mkCap = (label: string, basename: string) => {
+			const f = files.find((x) => x.basename === basename);
+			if (!f) return;
+			const c = caps.createDiv('memex-cap');
+			c.setText(label);
+			c.onclick = () => void this.app.workspace.getLeaf(true).openFile(f);
+		};
+		mkCap('交易学习', '索引-交易学习');
+		mkCap('摄影', '索引-摄影');
+		mkCap('旅行', '索引-旅行');
+		mkCap('memex', '索引-memex');
 
 		root.createDiv({ text: '快捷入口', cls: 'memex-sec' });
 		const actions = root.createDiv('memex-actions');
@@ -292,20 +307,24 @@ class HomeView extends ItemView {
 		mkBtn('📖', '今日 digest', () => void this.plugin.openTodayDigest());
 		mkBtn('↻', '立即同步', () => void this.plugin.fullSync(true));
 
-		root.createDiv({ text: '最近笔记', cls: 'memex-sec' });
-		const recent = files
-			.filter((f) => !f.path.startsWith('templates/'))
-			.sort((a, b) => b.stat.mtime - a.stat.mtime)
-			.slice(0, 8);
-		if (recent.length === 0) {
-			root.createDiv({ text: '还没有笔记', cls: 'memex-empty' });
-		}
-		for (const f of recent) {
-			const row = root.createDiv('memex-row');
-			row.createSpan({ text: f.basename, cls: 't' });
-			row.createSpan({ text: relTime(f.stat.mtime), cls: 'm' });
-			row.onclick = () => void this.app.workspace.getLeaf(true).openFile(f);
-		}
+		const mkList = (title: string, list: TFile[], empty: string) => {
+			root.createDiv({ text: title, cls: 'memex-sec' });
+			if (list.length === 0) {
+				root.createDiv({ text: empty, cls: 'memex-empty' });
+				return;
+			}
+			for (const f of list) {
+				const row = root.createDiv('memex-row');
+				row.createSpan({ text: f.basename, cls: 't' });
+				row.createSpan({ text: relTime(f.stat.mtime), cls: 'm' });
+				row.onclick = () => void this.app.workspace.getLeaf(true).openFile(f);
+			}
+		};
+		const byMtime = (a: TFile, b: TFile) => b.stat.mtime - a.stat.mtime;
+		// 进行中：不是阅读进度追踪，只是把 status=进行中的正文笔记排前面，供继续推进。
+		mkList('进行中', [...inProgress].sort(byMtime).slice(0, 5), '没有进行中的笔记');
+		mkList('待确认', [...pending].sort(byMtime).slice(0, 5), '没有待确认的笔记');
+		mkList('最近笔记', [...notes].sort(byMtime).slice(0, 8), '还没有笔记');
 	}
 }
 

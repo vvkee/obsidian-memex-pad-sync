@@ -194,7 +194,6 @@ var NewNoteModal = class extends import_obsidian.Modal {
 var HomeView = class extends import_obsidian.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
-    this.clockTimer = null;
     this.plugin = plugin;
   }
   getViewType() {
@@ -208,13 +207,6 @@ var HomeView = class extends import_obsidian.ItemView {
   }
   async onOpen() {
     this.render();
-    this.clockTimer = window.setInterval(() => {
-      const el = this.containerEl.querySelector(".memex-clock");
-      if (el) el.textContent = this.clockText();
-    }, 1e3);
-  }
-  async onClose() {
-    if (this.clockTimer !== null) window.clearInterval(this.clockTimer);
   }
   refresh() {
     if (this.containerEl.isConnected) this.render();
@@ -227,11 +219,6 @@ var HomeView = class extends import_obsidian.ItemView {
     if (h < 14) return "\u4E2D\u5348\u597D";
     if (h < 18) return "\u4E0B\u5348\u597D";
     return "\u665A\u4E0A\u597D";
-  }
-  clockText() {
-    const d = /* @__PURE__ */ new Date();
-    const p = (n) => String(n).padStart(2, "0");
-    return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
   }
   dateText() {
     const d = /* @__PURE__ */ new Date();
@@ -248,7 +235,10 @@ var HomeView = class extends import_obsidian.ItemView {
 .memex-hero { margin-bottom: 20px; }
 .memex-hello { font-size: 26px; font-weight: 700; margin: 0 0 4px; }
 .memex-date { color: var(--text-muted); font-size: 13px; display:flex; gap:12px; align-items:baseline;}
-.memex-clock { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; margin-left: auto;}
+.memex-caps { display: flex; gap: 8px; flex-wrap: wrap; }
+.memex-cap { border: 1px solid var(--background-modifier-border); background: var(--background-secondary);
+  border-radius: 999px; padding: 6px 14px; font-size: 13px; cursor: pointer; }
+.memex-cap:hover { background: var(--background-modifier-hover); }
 .memex-stats { display: flex; gap: 10px; margin: 18px 0; }
 .memex-stat { flex: 1; background: var(--background-secondary); border-radius: 10px; padding: 12px 14px; }
 .memex-stat .n { font-size: 22px; font-weight: 700; }
@@ -270,20 +260,48 @@ var HomeView = class extends import_obsidian.ItemView {
     hero.createEl("h1", { text: `${this.greeting()}\uFF0C\u4ECA\u5929\u4E5F\u5199\u4E00\u70B9\u5427`, cls: "memex-hello" });
     const dateRow = hero.createDiv("memex-date");
     dateRow.createSpan({ text: this.dateText() });
-    dateRow.createSpan({ text: this.clockText(), cls: "memex-clock" });
     const files = this.app.vault.getMarkdownFiles();
-    const notesCount = files.filter((f) => f.path.startsWith("notes/")).length;
+    const notes = files.filter((f) => f.path.startsWith("notes/"));
+    const fm = (f) => {
+      var _a, _b;
+      return (_b = (_a = this.app.metadataCache.getFileCache(f)) == null ? void 0 : _a.frontmatter) != null ? _b : {};
+    };
+    const isIndex = (f) => f.basename.startsWith("\u7D22\u5F15-") || f.basename === "\u5F85\u529E\u6E05\u5355";
     const inboxCount = files.filter((f) => /^inbox\/[^/]+\.md$/.test(f.path)).length;
+    const inProgress = notes.filter((f) => fm(f).status === "\u8FDB\u884C\u4E2D" && !isIndex(f));
+    const pending = notes.filter((f) => fm(f).status === "\u5F85\u786E\u8BA4");
     const lastSync = this.plugin.data.state.lastSyncAt;
     const stats = root.createDiv("memex-stats");
-    const mkStat = (n, l) => {
+    const mkStat = (n, l, f) => {
       const s = stats.createDiv("memex-stat");
       s.createDiv({ text: n, cls: "n" });
       s.createDiv({ text: l, cls: "l" });
+      if (f) s.onclick = () => void this.app.workspace.getLeaf(true).openFile(f);
     };
-    mkStat(String(notesCount), "\u7B14\u8BB0");
-    mkStat(String(inboxCount), "inbox \u5F85\u5904\u7406");
-    mkStat(lastSync ? relTime(lastSync) : "\u2014", "\u4E0A\u6B21\u540C\u6B65");
+    const todoFile = files.find((f) => f.basename === "\u5F85\u529E\u6E05\u5355");
+    mkStat(String(inProgress.length), "\u8FDB\u884C\u4E2D", void 0);
+    mkStat(String(pending.length), "\u5F85\u786E\u8BA4", void 0);
+    mkStat(String(inboxCount), "inbox \u5F85\u5904\u7406", void 0);
+    if (todoFile) {
+      const s = stats.createDiv("memex-stat");
+      s.createDiv({ text: "\u2192", cls: "n" });
+      s.createDiv({ text: "\u5F85\u529E\u6E05\u5355", cls: "l" });
+      s.onclick = () => void this.app.workspace.getLeaf(true).openFile(todoFile);
+    }
+    root.createDiv({ text: `\u4E0A\u6B21\u540C\u6B65\uFF1A${lastSync ? relTime(lastSync) : "\u2014"}`, cls: "memex-sec" });
+    root.createDiv({ text: "\u76EE\u6807", cls: "memex-sec" });
+    const caps = root.createDiv("memex-caps");
+    const mkCap = (label, basename) => {
+      const f = files.find((x) => x.basename === basename);
+      if (!f) return;
+      const c = caps.createDiv("memex-cap");
+      c.setText(label);
+      c.onclick = () => void this.app.workspace.getLeaf(true).openFile(f);
+    };
+    mkCap("\u4EA4\u6613\u5B66\u4E60", "\u7D22\u5F15-\u4EA4\u6613\u5B66\u4E60");
+    mkCap("\u6444\u5F71", "\u7D22\u5F15-\u6444\u5F71");
+    mkCap("\u65C5\u884C", "\u7D22\u5F15-\u65C5\u884C");
+    mkCap("memex", "\u7D22\u5F15-memex");
     root.createDiv({ text: "\u5FEB\u6377\u5165\u53E3", cls: "memex-sec" });
     const actions = root.createDiv("memex-actions");
     const mkBtn = (emoji, label, fn) => {
@@ -295,17 +313,23 @@ var HomeView = class extends import_obsidian.ItemView {
     mkBtn("\u270F\uFE0F", "\u65B0\u5EFA\u957F\u6587", () => this.plugin.newNoteFlow());
     mkBtn("\u{1F4D6}", "\u4ECA\u65E5 digest", () => void this.plugin.openTodayDigest());
     mkBtn("\u21BB", "\u7ACB\u5373\u540C\u6B65", () => void this.plugin.fullSync(true));
-    root.createDiv({ text: "\u6700\u8FD1\u7B14\u8BB0", cls: "memex-sec" });
-    const recent = files.filter((f) => !f.path.startsWith("templates/")).sort((a, b) => b.stat.mtime - a.stat.mtime).slice(0, 8);
-    if (recent.length === 0) {
-      root.createDiv({ text: "\u8FD8\u6CA1\u6709\u7B14\u8BB0", cls: "memex-empty" });
-    }
-    for (const f of recent) {
-      const row = root.createDiv("memex-row");
-      row.createSpan({ text: f.basename, cls: "t" });
-      row.createSpan({ text: relTime(f.stat.mtime), cls: "m" });
-      row.onclick = () => void this.app.workspace.getLeaf(true).openFile(f);
-    }
+    const mkList = (title, list, empty) => {
+      root.createDiv({ text: title, cls: "memex-sec" });
+      if (list.length === 0) {
+        root.createDiv({ text: empty, cls: "memex-empty" });
+        return;
+      }
+      for (const f of list) {
+        const row = root.createDiv("memex-row");
+        row.createSpan({ text: f.basename, cls: "t" });
+        row.createSpan({ text: relTime(f.stat.mtime), cls: "m" });
+        row.onclick = () => void this.app.workspace.getLeaf(true).openFile(f);
+      }
+    };
+    const byMtime = (a, b) => b.stat.mtime - a.stat.mtime;
+    mkList("\u8FDB\u884C\u4E2D", [...inProgress].sort(byMtime).slice(0, 5), "\u6CA1\u6709\u8FDB\u884C\u4E2D\u7684\u7B14\u8BB0");
+    mkList("\u5F85\u786E\u8BA4", [...pending].sort(byMtime).slice(0, 5), "\u6CA1\u6709\u5F85\u786E\u8BA4\u7684\u7B14\u8BB0");
+    mkList("\u6700\u8FD1\u7B14\u8BB0", [...notes].sort(byMtime).slice(0, 8), "\u8FD8\u6CA1\u6709\u7B14\u8BB0");
   }
 };
 var MemexPadSyncPlugin = class extends import_obsidian.Plugin {

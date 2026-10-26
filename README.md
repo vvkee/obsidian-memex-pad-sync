@@ -26,7 +26,7 @@ Obsidian 社区插件：memex vault 的 GitHub **双向同步** + 主页 dashboa
 
 **误删除修复（v2.2.1，必升）**：`vault.getFiles()` 看不到 `.obsidian/` 和点文件，旧版推送把“看不到”当成“已删除”。2026-10-25 iPad 一次双向推送误删了远端的 snippet、`.gitignore`、`.claude/settings.json`、多个 `.gitkeep`。v2.2.1 起，推送前对 state 里有、getFiles 里没有的文件先用 `adapter.exists` 核对，还在就按现存比对，真没了才删，核对出错时宁可不删。**在 iPad / Windows / Mac 上更新到 2.2.1 之前，不要从双向端做推送（手动同步也会先拉后推），否则还会误删。**
 
-**主页**：启动自动打开的 dashboard——问候语+时钟、笔记/inbox/同步统计、快捷入口（新建长文 / 今日 digest / 立即同步）、最近笔记。
+**主页 v2（v2.3.0）**：启动自动打开的 dashboard——问候语+日期（大时钟已去掉）、可行动的统计（进行中数、待确认数、inbox 待处理数，另附待办清单入口和上次同步时间）、目标胶囊（交易学习 / 摄影 / 旅行 / memex，点进对应主题索引）、进行中、待确认、最近笔记（只取 `notes/`，不再混 digest 和 `_agent/` 文件）。进行中一节不是阅读进度追踪（插件不记阅读位置），只是把 `status: 进行中` 的正文笔记排前面，供继续推进；frontmatter 从 Obsidian 的 metadataCache 读，缺 frontmatter 的文件不进进行中/待确认。
 
 **模板建文**：ribbon「新建长文」→ 弹窗选 `templates/` 里的模板（模板存在仓库里，多端共用）→ 输入标题 → 在 `notes/` 建好带 frontmatter 的文件并打开。
 
