@@ -206,10 +206,10 @@ var HomeView = class extends import_obsidian.ItemView {
     return "home";
   }
   async onOpen() {
-    this.render();
+    await this.render();
   }
   refresh() {
-    if (this.containerEl.isConnected) this.render();
+    if (this.containerEl.isConnected) void this.render();
   }
   greeting() {
     const h = (/* @__PURE__ */ new Date()).getHours();
@@ -225,7 +225,7 @@ var HomeView = class extends import_obsidian.ItemView {
     const week = ["\u65E5", "\u4E00", "\u4E8C", "\u4E09", "\u56DB", "\u4E94", "\u516D"][d.getDay()];
     return `${fmtDate(d)} \xB7 \u661F\u671F${week}`;
   }
-  render() {
+  async render() {
     const root = this.containerEl.children[1];
     root.empty();
     root.addClass("memex-home");
@@ -255,6 +255,13 @@ var HomeView = class extends import_obsidian.ItemView {
 .memex-row .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .memex-row .m { font-size: 12px; color: var(--text-faint); white-space: nowrap; }
 .memex-empty { color: var(--text-faint); font-size: 13px; padding: 8px 4px; }
+.memex-todo-sec { font-size: 13px; font-weight: 700; color: var(--text-muted); margin: 16px 0 4px; }
+.memex-todo-group { font-size: 13px; font-weight: 700; margin: 12px 0 2px; }
+.memex-todo-row { display: flex; gap: 10px; align-items: baseline; padding: 8px 4px;
+  border-bottom: 1px solid var(--background-modifier-border); cursor: pointer; }
+.memex-check { font-size: 16px; color: var(--text-muted); line-height: 1; }
+.memex-todo-row .tt { flex: 1; }
+.memex-todo-note { color: var(--text-muted); font-size: 12px; padding: 0 4px 8px 32px; }
 `;
     const hero = root.createDiv("memex-hero");
     hero.createEl("h1", { text: `${this.greeting()}\uFF0C\u4ECA\u5929\u4E5F\u5199\u4E00\u70B9\u5427`, cls: "memex-hello" });
@@ -302,6 +309,78 @@ var HomeView = class extends import_obsidian.ItemView {
     mkCap("\u6444\u5F71", "\u7D22\u5F15-\u6444\u5F71");
     mkCap("\u65C5\u884C", "\u7D22\u5F15-\u65C5\u884C");
     mkCap("memex", "\u7D22\u5F15-memex");
+    if (todoFile) {
+      const text = await this.app.vault.read(todoFile);
+      const sections = [];
+      let cur = null;
+      let curGroup = "";
+      let last = null;
+      for (const raw of text.split("\n")) {
+        const line = raw.trimEnd();
+        const h = line.match(/^## (.+)$/);
+        if (h) {
+          if (["\u4ECA\u65E5", "\u5373\u5C06\u5230\u6765", "\u968F\u65F6", "\u67D0\u5929", "\u5DF2\u5B8C\u6210"].includes(h[1].trim())) {
+            cur = { name: h[1].trim(), items: [] };
+            sections.push(cur);
+            curGroup = "";
+            last = null;
+          } else {
+            cur = null;
+          }
+          continue;
+        }
+        if (!cur || cur.name === "\u5DF2\u5B8C\u6210") continue;
+        const sub = line.match(/^### (.+)$/);
+        if (sub) {
+          curGroup = sub[1].trim();
+          continue;
+        }
+        const task = line.match(/^- \[( |x)\] (.+)$/);
+        if (task) {
+          if (task[1] === " ") {
+            last = { title: task[2].trim(), note: "", group: curGroup };
+            cur.items.push(last);
+          } else {
+            last = null;
+          }
+          continue;
+        }
+        const note = line.match(/^  - (.+)$/);
+        if (note && last) {
+          last.note = note[1].trim().replace(/\[\[([^\]]+)\]\]/g, "$1");
+          continue;
+        }
+        if (line && line.trim().length <= 12 && !line.startsWith(">") && !line.startsWith("\u6765\u6E90\uFF1A") && !line.startsWith("-")) {
+          curGroup = line.trim();
+        }
+      }
+      root.createDiv({ text: "\u5F85\u529E", cls: "memex-sec" });
+      root.createDiv({ text: "\u53EA\u8BFB\u5217\u8868\uFF0C\u52FE\u9009\u8BF7\u5230\u539F\u6587\u91CC\u52FE", cls: "memex-empty" });
+      for (const s of sections) {
+        if (s.name === "\u5DF2\u5B8C\u6210") continue;
+        root.createDiv({ text: s.name, cls: "memex-todo-sec" });
+        if (s.items.length === 0) {
+          root.createDiv({ text: s.name === "\u4ECA\u65E5" ? "\u4ECA\u65E5\u6CA1\u6709\u5230\u671F\u9879" : "\u6682\u65E0", cls: "memex-empty" });
+          continue;
+        }
+        let g = "";
+        for (const it of s.items) {
+          if (it.group && it.group !== g) {
+            g = it.group;
+            root.createDiv({ text: g, cls: "memex-todo-group" });
+          }
+          const row = root.createDiv("memex-todo-row");
+          const chk = row.createSpan("memex-check");
+          chk.setText("\u25CB");
+          row.createSpan({ text: it.title, cls: "tt" });
+          row.onclick = () => void this.app.workspace.getLeaf(true).openFile(todoFile);
+          if (it.note) {
+            const n = root.createDiv("memex-todo-note");
+            n.setText(it.note);
+          }
+        }
+      }
+    }
     root.createDiv({ text: "\u5FEB\u6377\u5165\u53E3", cls: "memex-sec" });
     const actions = root.createDiv("memex-actions");
     const mkBtn = (emoji, label, fn) => {

@@ -191,11 +191,11 @@ class HomeView extends ItemView {
 	}
 
 	async onOpen(): Promise<void> {
-		this.render();
+		await this.render();
 	}
 
 	refresh(): void {
-		if (this.containerEl.isConnected) this.render();
+		if (this.containerEl.isConnected) void this.render();
 	}
 
 	private greeting(): string {
@@ -214,7 +214,7 @@ class HomeView extends ItemView {
 		return `${fmtDate(d)} · 星期${week}`;
 	}
 
-	render(): void {
+	async render(): Promise<void> {
 		const root = this.containerEl.children[1] as HTMLElement;
 		root.empty();
 		root.addClass('memex-home');
@@ -245,6 +245,13 @@ class HomeView extends ItemView {
 .memex-row .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .memex-row .m { font-size: 12px; color: var(--text-faint); white-space: nowrap; }
 .memex-empty { color: var(--text-faint); font-size: 13px; padding: 8px 4px; }
+.memex-todo-sec { font-size: 13px; font-weight: 700; color: var(--text-muted); margin: 16px 0 4px; }
+.memex-todo-group { font-size: 13px; font-weight: 700; margin: 12px 0 2px; }
+.memex-todo-row { display: flex; gap: 10px; align-items: baseline; padding: 8px 4px;
+  border-bottom: 1px solid var(--background-modifier-border); cursor: pointer; }
+.memex-check { font-size: 16px; color: var(--text-muted); line-height: 1; }
+.memex-todo-row .tt { flex: 1; }
+.memex-todo-note { color: var(--text-muted); font-size: 12px; padding: 0 4px 8px 32px; }
 `;
 
 		const hero = root.createDiv('memex-hero');
@@ -294,6 +301,81 @@ class HomeView extends ItemView {
 		mkCap('摄影', '索引-摄影');
 		mkCap('旅行', '索引-旅行');
 		mkCap('memex', '索引-memex');
+
+		// 待办：Things 式列表，只读。解析 notes/待办清单.md 的分区，勾选请到原文。
+		if (todoFile) {
+			const text = await this.app.vault.read(todoFile);
+			type TodoItem = { title: string; note: string; group: string };
+			const sections: { name: string; items: TodoItem[] }[] = [];
+			let cur: { name: string; items: TodoItem[] } | null = null;
+			let curGroup = '';
+			let last: TodoItem | null = null;
+			for (const raw of text.split('\n')) {
+				const line = raw.trimEnd();
+				const h = line.match(/^## (.+)$/);
+				if (h) {
+					if (['今日', '即将到来', '随时', '某天', '已完成'].includes(h[1].trim())) {
+						cur = { name: h[1].trim(), items: [] };
+						sections.push(cur);
+						curGroup = '';
+						last = null;
+					} else {
+						cur = null;
+					}
+					continue;
+				}
+				if (!cur || cur.name === '已完成') continue;
+				const sub = line.match(/^### (.+)$/);
+				if (sub) {
+					curGroup = sub[1].trim();
+					continue;
+				}
+				const task = line.match(/^- \[( |x)\] (.+)$/);
+				if (task) {
+					if (task[1] === ' ') {
+						last = { title: task[2].trim(), note: '', group: curGroup };
+						cur.items.push(last);
+					} else {
+						last = null;
+					}
+					continue;
+				}
+				const note = line.match(/^  - (.+)$/);
+				if (note && last) {
+					last.note = note[1].trim().replace(/\[\[([^\]]+)\]\]/g, '$1');
+					continue;
+				}
+				if (line && line.trim().length <= 12 && !line.startsWith('>') && !line.startsWith('来源：') && !line.startsWith('-')) {
+					curGroup = line.trim();
+				}
+			}
+			root.createDiv({ text: '待办', cls: 'memex-sec' });
+			root.createDiv({ text: '只读列表，勾选请到原文里勾', cls: 'memex-empty' });
+			for (const s of sections) {
+				if (s.name === '已完成') continue;
+				root.createDiv({ text: s.name, cls: 'memex-todo-sec' });
+				if (s.items.length === 0) {
+					root.createDiv({ text: s.name === '今日' ? '今日没有到期项' : '暂无', cls: 'memex-empty' });
+					continue;
+				}
+				let g = '';
+				for (const it of s.items) {
+					if (it.group && it.group !== g) {
+						g = it.group;
+						root.createDiv({ text: g, cls: 'memex-todo-group' });
+					}
+					const row = root.createDiv('memex-todo-row');
+					const chk = row.createSpan('memex-check');
+					chk.setText('○');
+					row.createSpan({ text: it.title, cls: 'tt' });
+					row.onclick = () => void this.app.workspace.getLeaf(true).openFile(todoFile);
+					if (it.note) {
+						const n = root.createDiv('memex-todo-note');
+						n.setText(it.note);
+					}
+				}
+			}
+		}
 
 		root.createDiv({ text: '快捷入口', cls: 'memex-sec' });
 		const actions = root.createDiv('memex-actions');
