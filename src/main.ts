@@ -110,7 +110,10 @@ class NewNoteModal extends Modal {
 		super(app);
 		this.plugin = plugin;
 		this.templates = templates;
-		this.templatePath = templates[0]?.path ?? '';
+		// 默认模板优先选「长文」：这个弹窗是「新建长文」入口，模板列表按拼音排序后
+		// templates[0] 是「决定.md」，不是长文；以前默认建出来的就是笔记模板。
+		this.templatePath =
+			templates.find((f) => f.basename === '长文')?.path ?? templates[0]?.path ?? '';
 	}
 
 	onOpen(): void {
@@ -148,10 +151,13 @@ class NewNoteModal extends Modal {
 			const tpl = await this.app.vault.read(tplFile);
 			const date = fmtDate(new Date());
 			const body = tpl.split('{{title}}').join(title).split('{{date}}').join(date);
-			let path = `notes/${date}-${title}.md`;
+			// 长文模板进 writing/（Qi 手写专属区），其他笔记模板仍进 notes/。
+			// 不能把路径一刀切成 writing/，否则选了决定/学习等模板也会误进长文区。
+			const dir = this.templatePath.endsWith('/长文.md') ? 'writing' : 'notes';
+			let path = `${dir}/${date}-${title}.md`;
 			let i = 2;
 			while (await this.app.vault.adapter.exists(path)) {
-				path = `notes/${date}-${title}-${i}.md`;
+				path = `${dir}/${date}-${title}-${i}.md`;
 				i++;
 			}
 			await this.app.vault.create(path, body);
