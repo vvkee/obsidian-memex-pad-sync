@@ -135,12 +135,12 @@ function toArrayBuffer(u8) {
 }
 var NewNoteModal = class extends import_obsidian.Modal {
   constructor(app, plugin, templates) {
-    var _a, _b;
+    var _a, _b, _c, _d;
     super(app);
     this.titleText = "";
     this.plugin = plugin;
     this.templates = templates;
-    this.templatePath = (_b = (_a = templates[0]) == null ? void 0 : _a.path) != null ? _b : "";
+    this.templatePath = (_d = (_c = (_a = templates.find((f) => f.basename === "\u957F\u6587")) == null ? void 0 : _a.path) != null ? _c : (_b = templates[0]) == null ? void 0 : _b.path) != null ? _d : "";
   }
   onOpen() {
     const { contentEl } = this;
@@ -172,10 +172,11 @@ var NewNoteModal = class extends import_obsidian.Modal {
       const tpl = await this.app.vault.read(tplFile);
       const date = fmtDate(/* @__PURE__ */ new Date());
       const body = tpl.split("{{title}}").join(title).split("{{date}}").join(date);
-      let path = `notes/${date}-${title}.md`;
+      const dir = this.templatePath.endsWith("/\u957F\u6587.md") ? "writing" : "notes";
+      let path = `${dir}/${date}-${title}.md`;
       let i = 2;
       while (await this.app.vault.adapter.exists(path)) {
-        path = `notes/${date}-${title}-${i}.md`;
+        path = `${dir}/${date}-${title}-${i}.md`;
         i++;
       }
       await this.app.vault.create(path, body);
